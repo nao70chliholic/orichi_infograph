@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.naomatsuoka.orochibot</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/.venv/bin/python</string>
+        <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/bot/main.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph</string>
+    <key>StandardOutPath</key>
+    <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/cron.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/cron.log</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>

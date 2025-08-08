@@ -1,0 +1,133 @@
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-02 21:30:00.863887 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月02日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.51 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,854', 'unit': '人', 'diff': '+9人'}, 'トークン価格': {'val': '12.8143', 'unit': '円', 'diff': '+0.1668円'}, 'トークン在庫': {'val': '48,384', 'unit': '枚', 'diff': '-318枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月02日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.30 seconds ---
+Sending image to Discord...
+Successfully posted to Discord.
+--- 4. Discord webhook post took: 0.89 seconds ---
+--- Total script execution time: 1.69 seconds ---
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-04 06:30:01.421964 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月04日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.51 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,863', 'unit': '人', 'diff': '+2人'}, 'トークン価格': {'val': '12.6263', 'unit': '円', 'diff': '-0.2515円'}, 'トークン在庫': {'val': '48,743', 'unit': '枚', 'diff': '+478枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月04日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.27 seconds ---
+Sending image to Discord...
+Successfully posted to Discord.
+--- 4. Discord webhook post took: 0.96 seconds ---
+--- Total script execution time: 1.75 seconds ---
+--- Triggered by /graph command at 2025-08-04 10:19:24.057421 ---
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-04 10:19:24.215320 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月04日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.29 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,863', 'unit': '人', 'diff': '+2人'}, 'トークン価格': {'val': '12.6263', 'unit': '円', 'diff': '-0.2515円'}, 'トークン在庫': {'val': '48,743', 'unit': '枚', 'diff': '+478枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月04日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.12 seconds ---
+Sending image to https://discord.com/api/webhooks/1399784...
+Successfully posted to https://discord.com/api/webhooks/1399784.
+Sending image to https://discord.com/api/webhooks/1401733...
+Successfully posted to https://discord.com/api/webhooks/1401733.
+--- 4. Discord webhook post took: 1.69 seconds ---
+--- Total script execution time: 2.11 seconds ---
+--- CLI script finished with exit code 0 at 2025-08-04 10:19:26.350840 ---
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-05 06:53:19.885853 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月05日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.33 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,866', 'unit': '人', 'diff': '+3人'}, 'トークン価格': {'val': '12.5391', 'unit': '円', 'diff': '-0.0872円'}, 'トークン在庫': {'val': '48,912', 'unit': '枚', 'diff': '+169枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月05日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.12 seconds ---
+Sending image to https://discord.com/api/webhooks/1399784...
+Successfully posted to https://discord.com/api/webhooks/1399784.
+Sending image to https://discord.com/api/webhooks/1401733...
+Successfully posted to https://discord.com/api/webhooks/1401733.
+--- 4. Discord webhook post took: 4.64 seconds ---
+--- Total script execution time: 5.10 seconds ---
+--- Triggered by /graph command at 2025-08-06 07:04:43.087092 ---
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-06 07:04:43.783019 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月06日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.32 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,874', 'unit': '人', 'diff': '+8人'}, 'トークン価格': {'val': '11.9667', 'unit': '円', 'diff': '-0.5724円'}, 'トークン在庫': {'val': '50,068', 'unit': '枚', 'diff': '+1,156枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月06日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.13 seconds ---
+Sending image to https://discord.com/api/webhooks/1399784...
+Successfully posted to https://discord.com/api/webhooks/1399784.
+Sending image to https://discord.com/api/webhooks/1401733...
+Successfully posted to https://discord.com/api/webhooks/1401733.
+--- 4. Discord webhook post took: 1.75 seconds ---
+--- Total script execution time: 2.20 seconds ---
+--- CLI script finished with exit code 0 at 2025-08-06 07:04:46.019452 ---
+--- Triggered by /graph command at 2025-08-07 07:11:44.138264 ---
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-07 07:11:44.427062 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月07日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.37 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,883', 'unit': '人', 'diff': '+9人'}, 'トークン価格': {'val': '11.3873', 'unit': '円', 'diff': '-0.5794円'}, 'トークン在庫': {'val': '51,326', 'unit': '枚', 'diff': '+1,258枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月07日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.13 seconds ---
+Sending image to https://discord.com/api/webhooks/1399784...
+Successfully posted to https://discord.com/api/webhooks/1399784.
+Sending image to https://discord.com/api/webhooks/1401733...
+Successfully posted to https://discord.com/api/webhooks/1401733.
+--- 4. Discord webhook post took: 1.75 seconds ---
+--- Total script execution time: 2.24 seconds ---
+--- CLI script finished with exit code 0 at 2025-08-07 07:11:46.701943 ---
+--- Triggered by scheduled task at 2025-08-08 07:26:26.306371 ---
+Project root: /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph
+Python executable: /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/.venv/bin/python
+Script path: /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/bot/cli_post_infograph.py
+DEBUG: DISCORD_BOT_TOKEN loaded: True
+DEBUG: DISCORD_CHANNEL_ID loaded: True
+DEBUG: DISCORD_WEBHOOK_URL loaded: True
+--- Script started at 2025-08-08 07:26:26.550470 ---
+Found relevant message: ◆FiNANCiE開運オロチトークン現在情報（2025年 08月08日 06:00時点）
+・メンバー...
+--- 1. Discord API fetch took: 0.31 seconds ---
+Parsed Metrics: {'メンバー数': {'val': '21,888', 'unit': '人', 'diff': '+5人'}, 'トークン価格': {'val': '11.1532', 'unit': '円', 'diff': '-0.2341円'}, 'トークン在庫': {'val': '51,862', 'unit': '枚', 'diff': '+536枚'}}
+Parsed Title: FiNANCiE開運オロチトークン現在情報
+Parsed Title Timestamp: 2025年 08月08日 06:00時点
+--- 2. Parsing data took: 0.00 seconds ---
+--- 3. Image generation took: 0.13 seconds ---
+Sending image to https://discord.com/api/webhooks/1399784...
+Successfully posted to https://discord.com/api/webhooks/1399784.
+Sending image to https://discord.com/api/webhooks/1401733...
+Successfully posted to https://discord.com/api/webhooks/1401733.
+--- 4. Discord webhook post took: 1.82 seconds ---
+--- Total script execution time: 2.26 seconds ---
+--- CLI script finished with exit code 0 at 2025-08-08 07:26:28.850855 ---
