@@ -6,8 +6,13 @@
     <string>com.naomatsuoka.orochibot.main</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/.venv/bin/python</string>
-        <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/bot/main.py</string>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>
+            cd /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph &amp;&amp; \
+            source .venv/bin/activate &amp;&amp; \
+            python bot/main.py
+        </string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph</string>
