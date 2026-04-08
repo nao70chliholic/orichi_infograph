@@ -1,1 +1,2 @@
-30 6 * * * /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/.venv/bin/python /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/bot/cli_post_infograph.py >> /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/cron.log 2>&1 >> /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/cron.log 2>&1
+# 削除済み：Botの内部タスク（main.py の scheduled_post）で定期実行するため
+# 0 7 * * * /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/.venv/bin/python /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/bot/cli_post_infograph.py >> /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/cron.log 2>&1

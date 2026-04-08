@@ -22,7 +22,10 @@ OROCHI_PATH = Path(__file__).parent / "assets" / "plush_orochi.png" # Path to th
 
 # --- Public Functions ---
 
-def parse_metrics(raw_txt: str) -> tuple[dict, str, str]:
+DEFAULT_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "トークン在庫")
+
+
+def parse_metrics(raw_txt: str, *, target_keys: tuple[str, ...] | None = None) -> tuple[dict, str, str]:
     """
     Parses raw text data to extract metrics, title, and timestamp.
 
@@ -44,29 +47,46 @@ def parse_metrics(raw_txt: str) -> tuple[dict, str, str]:
     title_timestamp = ""
     lines = raw_txt.strip().split("\n")
 
-    # Regex for metric lines: captures key, value, unit, and difference
-    metric_pattern = re.compile(r"^\s*・(.+?)\s+([\d\.,]+)(.*?)\s*（前日比\s*([+-]?[\d\.,]+[^）]*)）")
-    # Regex for title line: captures the main title and its timestamp
-    title_pattern = re.compile(r"^(◆.+?)\s*（(.+?)時点）")
+    # Regex for metric lines: captures key, value, unit, and difference.
+    # Supports full-width/half-width parentheses and various diff labels (前日比/前週比/前回比).
+    metric_pattern = re.compile(
+        r"^\s*・\s*(?P<key>.+?)\s+"
+        r"(?P<val>[\d\.,]+)\s*(?P<unit>[^（(]+?)\s*"
+        r"[（(]\s*(?:前日比|前週比|前回比)\s*(?P<diff>[^）)]+)\s*[）)]\s*$"
+    )
+    # Regex for title line: captures the main title and its timestamp (anything inside parentheses).
+    title_pattern = re.compile(r"^(◆.+?)\s*[（(]\s*(.+?)\s*[）)]\s*$")
 
     for line in lines:
-        if line.startswith("◆"): # Check if the line is the title line
+        if line.startswith("◆"):  # Check if the line is the title line
             title_match = title_pattern.match(line)
             if title_match:
                 # Extract title and remove '◆' prefix
                 title = title_match.group(1).strip().replace("◆", "")
-                # Extract timestamp and re-add "時点"
-                title_timestamp = title_match.group(2).strip() + "時点"
+                # Extract timestamp (keep as-is if it already ends with "時点")
+                raw_ts = title_match.group(2).strip()
+                title_timestamp = raw_ts if raw_ts.endswith("時点") else raw_ts
             continue # Skip title line for metrics parsing
 
         metric_match = metric_pattern.match(line)
         if metric_match:
-            key, val, unit, diff = metric_match.groups()
-            metrics[key.strip()] = {
+            key = metric_match.group("key").strip()
+            val = metric_match.group("val").strip()
+            unit = metric_match.group("unit").strip()
+            diff = metric_match.group("diff").strip()
+            metrics[key] = {
                 "val": val.strip(),
                 "unit": unit.strip(),
                 "diff": diff.strip(),
             }
+
+    if target_keys is not None:
+        filtered: dict = {}
+        for k in target_keys:
+            if k in metrics:
+                filtered[k] = metrics[k]
+        metrics = filtered
+
     return metrics, title, title_timestamp
 
 def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
@@ -150,7 +170,8 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
         draw.text((80, y_offset + 45), val_unit, font=font_metric_value, fill="#333366")
 
         # Draw the "前日比" label and the difference value
-        diff_color = "green" if data['diff'].startswith("+") else "blue" # Color based on positive/negative difference
+        diff_prefix = data["diff"][:1]
+        diff_color = "green" if diff_prefix in {"+", "＋"} else "blue"  # Color based on positive/negative difference
         draw.text((WIDTH - 320, y_offset + 55), "前日比", font=font_small, fill="#333366")
         draw.text((WIDTH - 220, y_offset + 55), data['diff'], font=font_small, fill=diff_color)
 
@@ -180,4 +201,4 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
 
 # --- dunder all ---
 # Define public API of the module
-__all__ = ["parse_metrics", "build_image"]
+__all__ = ["DEFAULT_TARGET_KEYS", "parse_metrics", "build_image"]
