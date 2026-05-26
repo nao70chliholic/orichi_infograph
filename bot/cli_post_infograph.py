@@ -212,46 +212,49 @@ def main():
             print(f"Failed to post to {url[:40]} after {MAX_RETRIES} attempts.")
             all_posts_successful = False
 
-    for channel_id in target_channel_ids:
-        post_successful = False
-        for attempt in range(MAX_RETRIES):
-            try:
-                print(f"Sending image via bot to channel {channel_id}... (Attempt {attempt + 1}/{MAX_RETRIES})")
-                payload = {"content": ""}
-                files = {
-                    "files[0]": (image_filename, image_data, "image/png")
-                }
+    if webhook_urls and target_channel_ids:
+        print("DEBUG: Both webhook URLs and target channel IDs are configured; posting only via webhooks to avoid duplicate infographic delivery.")
+    else:
+        for channel_id in target_channel_ids:
+            post_successful = False
+            for attempt in range(MAX_RETRIES):
+                try:
+                    print(f"Sending image via bot to channel {channel_id}... (Attempt {attempt + 1}/{MAX_RETRIES})")
+                    payload = {"content": ""}
+                    files = {
+                        "files[0]": (image_filename, image_data, "image/png")
+                    }
 
-                response = requests.post(
-                    f"https://discord.com/api/v10/channels/{channel_id}/messages",
-                    headers=MESSAGE_POST_HEADERS,
-                    data={"payload_json": json.dumps(payload)},
-                    files=files,
-                    timeout=REQUEST_TIMEOUT
-                )
+                    response = requests.post(
+                        f"https://discord.com/api/v10/channels/{channel_id}/messages",
+                        headers=MESSAGE_POST_HEADERS,
+                        data={"payload_json": json.dumps(payload)},
+                        files=files,
+                        timeout=REQUEST_TIMEOUT
+                    )
 
-                if response.status_code in (200, 201):
-                    print(f"Successfully posted to channel {channel_id}.")
-                    post_successful = True
-                    break
-                if response.status_code == 429:
-                    retry_after = response.json().get("retry_after", POST_RETRY_DELAY)
-                    print(f"Rate limited posting to channel {channel_id}. Retrying in {retry_after} seconds...")
-                    time.sleep(retry_after)
-                    continue
+                    if response.status_code in (200, 201):
+                        print(f"Successfully posted to channel {channel_id}.")
+                        post_successful = True
+                        break
+                    if response.status_code == 429:
+                        retry_after = response.json().get("retry_after", POST_RETRY_DELAY)
+                        print(f"Rate limited posting to channel {channel_id}. Retrying in {retry_after} seconds...")
+                        time.sleep(retry_after)
+                        continue
 
-                print(f"Error posting to channel {channel_id}: {response.status_code} {response.text}")
+                    print(f"Error posting to channel {channel_id}: {response.status_code} {response.text}")
 
-            except requests.exceptions.RequestException as e:
-                print(f"Network error posting to channel {channel_id}: {e}")
+                except requests.exceptions.RequestException as e:
+                    print(f"Network error posting to channel {channel_id}: {e}")
 
-            if attempt < MAX_RETRIES - 1:
-                print(f"Retrying in {POST_RETRY_DELAY} seconds...")
-                time.sleep(POST_RETRY_DELAY)
+                if attempt < MAX_RETRIES - 1:
+                    print(f"Retrying in {POST_RETRY_DELAY} seconds...")
+                    time.sleep(POST_RETRY_DELAY)
 
-        if not post_successful:
-            print(f"Failed to post to channel {channel_id} after {MAX_RETRIES} attempts.")
-            all_posts_successful = False
+            if not post_successful:
+                print(f"Failed to post to channel {channel_id} after {MAX_RETRIES} attempts.")
+                all_posts_successful = False
 
     print(f"--- 4. Discord delivery took: {time.time() - start_time:.2f} seconds ---")
     
