@@ -31,6 +31,16 @@ print(f"DEBUG: Found Webhook URLs: {webhook_debug_urls}")
 
 target_channel_ids_env = os.getenv("DISCORD_TARGET_CHANNEL_IDS", "")
 target_channel_ids = [cid.strip() for cid in target_channel_ids_env.split(",") if cid.strip()]
+# Keep insertion order while deduplicating channel IDs
+seen = set()
+unique_target_channel_ids = []
+for channel_id in target_channel_ids:
+    if channel_id not in seen:
+        seen.add(channel_id)
+        unique_target_channel_ids.append(channel_id)
+if len(target_channel_ids) != len(unique_target_channel_ids):
+    print(f"DEBUG: Removed {len(target_channel_ids) - len(unique_target_channel_ids)} duplicated target channel IDs")
+target_channel_ids = unique_target_channel_ids
 print(f"DEBUG: DISCORD_TARGET_CHANNEL_IDS parsed: {target_channel_ids}")
 
 
@@ -40,8 +50,8 @@ DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID") # ID of the Discord channel
 # Collect all webhook URLs from environment variables
 # This will find DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_URL_2, DISCORD_WEBHOOK_URL_3, etc.
 webhook_urls = [
-    value for key, value in os.environ.items()
-    if key.startswith("DISCORD_WEBHOOK_URL") and value
+    value.strip() for key, value in os.environ.items()
+    if key.startswith("DISCORD_WEBHOOK_URL") and value and value.strip()
 ]
 # Keep insertion order, but deduplicate exact URLs (avoid same webhook fired twice)
 seen = set()
