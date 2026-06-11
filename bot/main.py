@@ -46,12 +46,38 @@ class MyClient(discord.Client):
                     await self.tree.sync(guild=guild_obj)
             self._commands_synced = True
         # 定期実行タスクを開始（既に動いていれば再起動しない）
+        if not self.daily_stats.is_running():
+            self.daily_stats.start()
         if not self.scheduled_post.is_running():
             self.scheduled_post.start()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
+
+    @tasks.loop(time=datetime.time(hour=6, minute=0, tzinfo=JST))
+    async def daily_stats(self):
+        """毎日6時に Daily Bot (stats.py) を実行"""
+        now = datetime.datetime.now(JST)
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Daily stats task triggered.")
+        log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
+        exit_code = run_daily_stats_script(log_file_path, trigger_source="daily stats task")
+        if exit_code != 0:
+            print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Daily stats run failed with exit code {exit_code}.")
+
+    @daily_stats.before_loop
+    async def before_daily_stats(self):
+        await self.wait_until_ready()
+        now = datetime.datetime.now(JST)
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Daily stats loop ready. Waiting until 06:00 JST.")
+
+    @daily_stats.error
+    async def daily_stats_error(self, error: Exception):
+        now = datetime.datetime.now(JST)
+        log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"--- Daily stats task error at {now} ---\n{error}\n")
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Daily stats error: {error}")
 
     @tasks.loop(time=datetime.time(hour=7, minute=0, tzinfo=JST))
     async def scheduled_post(self):
@@ -79,6 +105,39 @@ class MyClient(discord.Client):
 # Botのインテントを設定
 intents = discord.Intents.default()
 client = MyClient(intents=intents)
+
+def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats task"):
+    """Wrapper function to run stats.py from the 20250715orochi_dailycounter project."""
+    # Path to the Daily Counter project
+    project_root = "/Users/naomatsuoka/Documents/開発/cnp/20250715orochi_dailycounter"
+    script_path = os.path.join(project_root, "stats.py")
+    python_executable = os.path.join(project_root, ".venv", "bin", "python")
+    
+    with open(log_path, "a") as log_file:
+        log_file.write(f"--- Daily Stats Script triggered by {trigger_source} at {datetime.datetime.now()} ---\n")
+        log_file.write(f"Project root: {project_root}\n")
+        log_file.write(f"Python executable: {python_executable}\n")
+        log_file.write(f"Script path: {script_path}\n")
+        log_file.flush()
+
+        try:
+            result = subprocess.run(
+                [python_executable, script_path],
+                cwd=project_root,
+                stdout=log_file,
+                stderr=log_file,
+                text=True,
+                check=True
+            )
+            log_file.write(f"--- Daily Stats Script finished with exit code {result.returncode} at {datetime.datetime.now()} ---\n")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            log_file.write(f"--- Daily Stats Script failed: {e} at {datetime.datetime.now()} ---\n")
+            if hasattr(e, 'stderr') and e.stderr:
+                log_file.write(f"--- Stderr: ---\n{e.stderr}\n")
+            return 1  # Indicate failure
+        
+        log_file.flush()
+        return result.returncode
 
 def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
     """Wrapper function to run the blocking subprocess call and log its output."""
