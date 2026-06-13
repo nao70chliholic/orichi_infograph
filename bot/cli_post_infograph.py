@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 from discord_webhook import DiscordWebhook
+from typing import Optional
 
 # Add project root to Python path to allow importing local modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -65,6 +66,44 @@ if len(webhook_urls) != len(unique_webhook_urls):
     print(f"DEBUG: Removed {len(webhook_urls) - len(unique_webhook_urls)} duplicated webhook URLs")
 
 webhook_urls = unique_webhook_urls
+
+# Attempt to resolve webhook target channel IDs and deduplicate webhooks
+# that point to the same destination channel to avoid duplicate posts.
+def _resolve_webhook_channel_id(url: str) -> Optional[str]:
+    try:
+        parts = url.rstrip("/").split("/")
+        webhook_id = parts[-2]
+        webhook_token = parts[-1]
+        info_url = f"https://discord.com/api/webhooks/{webhook_id}/{webhook_token}"
+        resp = requests.get(info_url, timeout=REQUEST_TIMEOUT)
+        if resp.ok:
+            info = resp.json()
+            return str(info.get("channel_id"))
+    except Exception as e:
+        print(f"DEBUG: Could not resolve webhook info for {url[:40]}: {e}")
+    return None
+
+seen_channels = set()
+filtered_webhook_urls = []
+failed_resolve_urls = []
+for url in webhook_urls:
+    channel_id = _resolve_webhook_channel_id(url)
+    if channel_id:
+        if channel_id in seen_channels:
+            print(f"DEBUG: Removing webhook {url[:40]} — duplicate target channel {channel_id}")
+            continue
+        seen_channels.add(channel_id)
+        filtered_webhook_urls.append(url)
+    else:
+        failed_resolve_urls.append(url)
+
+if len(filtered_webhook_urls) != len(webhook_urls):
+    print(f"DEBUG: Removed {len(webhook_urls) - len(filtered_webhook_urls)} webhook(s) to avoid duplicate posts.")
+
+if failed_resolve_urls:
+    print(f"DEBUG: Could not resolve channel ID for {len(failed_resolve_urls)} webhook(s); using only webhooks with resolved channels.")
+
+webhook_urls = filtered_webhook_urls
 
 # --- Constants ---
 MAX_RETRIES = 3
@@ -185,6 +224,21 @@ def main():
     image_data = image_bytes.getvalue()
     print(f"--- 3. Image generation took: {time.time() - start_time:.2f} seconds ---")
 
+    # Idempotency guard: avoid posting the same infographic twice
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    posted_record_file = os.path.join(project_root, '.last_posted.json')
+    post_key = f"{title}|{title_timestamp}"
+    try:
+        prev = {}
+        if os.path.exists(posted_record_file):
+            with open(posted_record_file, 'r', encoding='utf-8') as pf:
+                prev = json.load(pf)
+        if prev.get('last_key') == post_key:
+            print("INFO: Same infographic already posted previously; skipping to avoid duplicate.")
+            sys.exit(0)
+    except Exception as e:
+        print(f"DEBUG: Could not read posted record file: {e}")
+
     # 4. Post the generated image to Discord via Webhooks (with retries)
     start_time = time.time()
     image_filename = "orochi_infograph.png"
@@ -272,6 +326,13 @@ def main():
         print("Warning: One or more webhooks failed to post.")
         # Optionally, exit with an error code if any webhook fails
         # sys.exit(1)
+    else:
+        # Record successful post to prevent immediate duplicates from other triggers
+        try:
+            with open(posted_record_file, 'w', encoding='utf-8') as pf:
+                json.dump({'last_key': post_key, 'timestamp': time.time()}, pf)
+        except Exception as e:
+            print(f"DEBUG: Failed to write posted record file: {e}")
 
     print(f"--- Total script execution time: {time.time() - total_start_time:.2f} seconds ---")
 
