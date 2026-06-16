@@ -6,20 +6,15 @@
     <string>com.naomatsuoka.orochibot.main</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/bash</string>
-        <string>-c</string>
-        <string>
-            cd /Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph &amp;&amp; \
-            source .venv/bin/activate &amp;&amp; \
-            python bot/main.py
-        </string>
+        <string>/bin/sh</string>
+        <string>/Users/naomatsuoka/orochi_infograph/launch_bot.sh</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph</string>
+    <string>/Users/naomatsuoka/orochi_infograph</string>
     <key>StandardOutPath</key>
-    <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/main_bot.log</string>
+    <string>/Users/naomatsuoka/Library/Logs/com.naomatsuoka.orochibot.main.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/naomatsuoka/Documents/開発/cnp/20250730_orochi_infograph/main_bot.log</string>
+    <string>/Users/naomatsuoka/Library/Logs/com.naomatsuoka.orochibot.main.log</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
