@@ -5,6 +5,8 @@ This script fetches metric data from a Discord channel using the Discord API,
 generates an infographic image, and posts it back to Discord via Webhook.
 """
 
+import argparse
+import hashlib
 import json
 import os
 import sys
@@ -14,6 +16,13 @@ from datetime import datetime
 from dotenv import load_dotenv
 from discord_webhook import DiscordWebhook
 from typing import Optional
+
+# --- Constants ---
+# These need to be available before helper functions are invoked at import-time
+MAX_RETRIES = 3
+FETCH_RETRY_DELAY = 10  # seconds to wait for source data
+POST_RETRY_DELAY = 5    # seconds to wait for network issues
+REQUEST_TIMEOUT = 15    # seconds to wait for a response from Discord
 
 # Add project root to Python path to allow importing local modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -69,23 +78,30 @@ webhook_urls = unique_webhook_urls
 
 # Attempt to resolve webhook target channel IDs and deduplicate webhooks
 # that point to the same destination channel to avoid duplicate posts.
-def _resolve_webhook_channel_id(url: str) -> Optional[str]:
+def _resolve_webhook_channel_id(url: str, timeout: int | None = None) -> Optional[str]:
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT
+
     try:
         parts = url.rstrip("/").split("/")
+        if len(parts) < 2:
+            raise ValueError("Invalid webhook URL format")
+
         webhook_id = parts[-2]
         webhook_token = parts[-1]
         info_url = f"https://discord.com/api/webhooks/{webhook_id}/{webhook_token}"
-        resp = requests.get(info_url, timeout=REQUEST_TIMEOUT)
+        resp = requests.get(info_url, timeout=timeout)
         if resp.ok:
             info = resp.json()
             return str(info.get("channel_id"))
+        print(f"DEBUG: Webhook info request failed for {url[:40]}: {resp.status_code} {resp.text}")
     except Exception as e:
         print(f"DEBUG: Could not resolve webhook info for {url[:40]}: {e}")
     return None
 
 seen_channels = set()
-filtered_webhook_urls = []
-failed_resolve_urls = []
+resolved_webhook_urls = []
+unresolved_webhook_urls = []
 for url in webhook_urls:
     channel_id = _resolve_webhook_channel_id(url)
     if channel_id:
@@ -93,27 +109,43 @@ for url in webhook_urls:
             print(f"DEBUG: Removing webhook {url[:40]} — duplicate target channel {channel_id}")
             continue
         seen_channels.add(channel_id)
-        filtered_webhook_urls.append(url)
+        resolved_webhook_urls.append(url)
     else:
-        failed_resolve_urls.append(url)
+        unresolved_webhook_urls.append(url)
 
-if len(filtered_webhook_urls) != len(webhook_urls):
-    print(f"DEBUG: Removed {len(webhook_urls) - len(filtered_webhook_urls)} webhook(s) to avoid duplicate posts.")
+if resolved_webhook_urls and unresolved_webhook_urls:
+    print(f"DEBUG: Resolved {len(resolved_webhook_urls)} webhook(s) and kept {len(unresolved_webhook_urls)} unresolved webhook(s).")
+    webhook_urls = resolved_webhook_urls + unresolved_webhook_urls
+elif resolved_webhook_urls:
+    print(f"DEBUG: Resolved {len(resolved_webhook_urls)} webhook(s); no unresolved webhook URLs.")
+    webhook_urls = resolved_webhook_urls
+elif unresolved_webhook_urls:
+    print(f"DEBUG: Could not resolve any webhook channel IDs; using {len(unresolved_webhook_urls)} original webhook(s).")
+    webhook_urls = unresolved_webhook_urls
+else:
+    print("DEBUG: No webhook URLs configured.")
+    webhook_urls = []
 
-if failed_resolve_urls:
-    print(f"DEBUG: Could not resolve channel ID for {len(failed_resolve_urls)} webhook(s); using only webhooks with resolved channels.")
-
-webhook_urls = filtered_webhook_urls
-
-# --- Constants ---
-MAX_RETRIES = 3
-FETCH_RETRY_DELAY = 10  # seconds to wait for source data
-POST_RETRY_DELAY = 5    # seconds to wait for network issues
-REQUEST_TIMEOUT = 15    # seconds to wait for a response from Discord
+print(f"DEBUG: Final webhook URL count after resolution: {len(webhook_urls)}")
 
 # --- Main Logic ---
 
-def main():
+def parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate and post Orochi infograph images.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate the infographic image locally without posting to Discord."
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="dry_infograph.png",
+        help="Output file path for dry-run image generation."
+    )
+    return parser.parse_args()
+
+def main(dry_run: bool = False, output_path: str | None = None):
     """
     Main function to fetch data, generate image, and post to Discord.
     """
@@ -128,6 +160,8 @@ def main():
     if not webhook_urls and not target_channel_ids:
         print("Error: Configure at least one DISCORD_WEBHOOK_URL... or provide DISCORD_TARGET_CHANNEL_IDS in the .env file.")
         sys.exit(1)
+
+    print(f"DEBUG: Using {len(webhook_urls)} webhook(s) and {len(target_channel_ids)} target channel IDs.")
 
     # Discord API endpoint for fetching channel messages
     API_URL = f"https://discord.com/api/v10/channels/{DISCORD_CHANNEL_ID}/messages"
@@ -224,10 +258,24 @@ def main():
     image_data = image_bytes.getvalue()
     print(f"--- 3. Image generation took: {time.time() - start_time:.2f} seconds ---")
 
+    if dry_run:
+        dry_output = output_path or "dry_infograph.png"
+        try:
+            with open(dry_output, "wb") as f:
+                f.write(image_data)
+            print(f"Dry run complete: wrote infographic to {dry_output}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error: Failed to write dry-run image to {dry_output}: {e}")
+            sys.exit(1)
+
     # Idempotency guard: avoid posting the same infographic twice
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     posted_record_file = os.path.join(project_root, '.last_posted.json')
-    post_key = f"{title}|{title_timestamp}"
+    metrics_hash = hashlib.sha256(
+        json.dumps(metrics, sort_keys=True, ensure_ascii=False).encode('utf-8')
+    ).hexdigest()
+    post_key = f"{title}|{title_timestamp}|{metrics_hash}"
     try:
         prev = {}
         if os.path.exists(posted_record_file):
@@ -244,6 +292,7 @@ def main():
     image_filename = "orochi_infograph.png"
 
     all_posts_successful = True
+    any_webhook_success = False
     for url in webhook_urls:
         if not url:
             continue
@@ -260,13 +309,19 @@ def main():
                 if response.status_code in [200, 204]:
                     print(f"Successfully posted to {url[:40]}.")
                     post_successful = True
+                    any_webhook_success = True
                     break
                 else:
-                    print(f"Error posting to {url[:40]}: {response.status_code} {response.reason}")
-                    print(response.content)
+                    print(f"Error posting to {url[:40]}: {response.status_code} {getattr(response, 'reason', '')}")
+                    try:
+                        print(response.content)
+                    except Exception:
+                        pass
 
             except requests.exceptions.RequestException as e:
                 print(f"Network error posting to {url[:40]}: {e}")
+            except Exception as e:
+                print(f"Error posting to {url[:40]}: {e}")
 
             if attempt < MAX_RETRIES - 1:
                 print(f"Retrying in {POST_RETRY_DELAY} seconds...")
@@ -275,6 +330,10 @@ def main():
         if not post_successful:
             print(f"Failed to post to {url[:40]} after {MAX_RETRIES} attempts.")
             all_posts_successful = False
+
+    if webhook_urls and target_channel_ids and not any_webhook_success:
+        print("DEBUG: All webhook posts failed; falling back to bot channel posting.")
+        webhook_urls = []
 
     if webhook_urls and target_channel_ids:
         print("DEBUG: Both webhook URLs and target channel IDs are configured; posting only via webhooks to avoid duplicate infographic delivery.")
@@ -311,6 +370,8 @@ def main():
 
                 except requests.exceptions.RequestException as e:
                     print(f"Network error posting to channel {channel_id}: {e}")
+                except Exception as e:
+                    print(f"Error posting to channel {channel_id}: {e}")
 
                 if attempt < MAX_RETRIES - 1:
                     print(f"Retrying in {POST_RETRY_DELAY} seconds...")
@@ -338,4 +399,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_cli_args()
+    main(dry_run=args.dry_run, output_path=args.output)
