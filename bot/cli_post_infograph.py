@@ -149,6 +149,10 @@ def main(dry_run: bool = False, output_path: str | None = None):
     """
     Main function to fetch data, generate image, and post to Discord.
     """
+    # Work with a local copy of the module-level `webhook_urls` so we can
+    # modify it within this function without affecting module state or
+    # requiring a `global` declaration.
+    webhooks = list(webhook_urls)
     total_start_time = time.time()
     print(f"--- Script started at {datetime.now()} ---")
 
@@ -157,11 +161,11 @@ def main(dry_run: bool = False, output_path: str | None = None):
         print("Error: DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID must be set in the .env file.")
         sys.exit(1)
 
-    if not webhook_urls and not target_channel_ids:
+    if not webhooks and not target_channel_ids:
         print("Error: Configure at least one DISCORD_WEBHOOK_URL... or provide DISCORD_TARGET_CHANNEL_IDS in the .env file.")
         sys.exit(1)
 
-    print(f"DEBUG: Using {len(webhook_urls)} webhook(s) and {len(target_channel_ids)} target channel IDs.")
+    print(f"DEBUG: Using {len(webhooks)} webhook(s) and {len(target_channel_ids)} target channel IDs.")
 
     # Discord API endpoint for fetching channel messages
     API_URL = f"https://discord.com/api/v10/channels/{DISCORD_CHANNEL_ID}/messages"
@@ -293,7 +297,7 @@ def main(dry_run: bool = False, output_path: str | None = None):
 
     all_posts_successful = True
     any_webhook_success = False
-    for url in webhook_urls:
+    for url in webhooks:
         if not url:
             continue
 
@@ -331,11 +335,11 @@ def main(dry_run: bool = False, output_path: str | None = None):
             print(f"Failed to post to {url[:40]} after {MAX_RETRIES} attempts.")
             all_posts_successful = False
 
-    if webhook_urls and target_channel_ids and not any_webhook_success:
+    if webhooks and target_channel_ids and not any_webhook_success:
         print("DEBUG: All webhook posts failed; falling back to bot channel posting.")
-        webhook_urls = []
+        webhooks = []
 
-    if webhook_urls and target_channel_ids:
+    if webhooks and target_channel_ids:
         print("DEBUG: Both webhook URLs and target channel IDs are configured; posting only via webhooks to avoid duplicate infographic delivery.")
     else:
         for channel_id in target_channel_ids:
