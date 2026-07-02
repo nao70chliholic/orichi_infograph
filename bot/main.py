@@ -106,18 +106,32 @@ class MyClient(discord.Client):
 intents = discord.Intents.default()
 client = MyClient(intents=intents)
 
+def _make_subprocess_env(python_executable: str) -> dict[str, str]:
+    """Build a clean subprocess environment for a venv-based Python executable."""
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("VIRTUAL_ENV", None)
+
+    venv_dir = os.path.dirname(os.path.dirname(python_executable))
+    env["VIRTUAL_ENV"] = venv_dir
+    env["PATH"] = os.pathsep.join([os.path.dirname(python_executable), env.get("PATH", "")])
+    return env
+
+
 def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats task"):
     """Wrapper function to run stats.py from the 20250715orochi_dailycounter project."""
     # Path to the Daily Counter project
     project_root = "/Users/naomatsuoka/Documents/開発/cnp/20250715orochi_dailycounter"
     script_path = os.path.join(project_root, "stats.py")
     python_executable = os.path.join(project_root, ".venv", "bin", "python")
+    env = _make_subprocess_env(python_executable)
     
     with open(log_path, "a") as log_file:
         log_file.write(f"--- Daily Stats Script triggered by {trigger_source} at {datetime.datetime.now()} ---\n")
         log_file.write(f"Project root: {project_root}\n")
         log_file.write(f"Python executable: {python_executable}\n")
         log_file.write(f"Script path: {script_path}\n")
+        log_file.write(f"Subprocess VIRTUAL_ENV: {env.get('VIRTUAL_ENV')}\n")
         log_file.flush()
 
         try:
@@ -127,6 +141,7 @@ def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats tas
                 stdout=log_file,
                 stderr=log_file,
                 text=True,
+                env=env,
                 check=True
             )
             log_file.write(f"--- Daily Stats Script finished with exit code {result.returncode} at {datetime.datetime.now()} ---\n")
@@ -144,12 +159,14 @@ def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
     script_path = os.path.join(os.path.dirname(__file__), "cli_post_infograph.py")
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     python_executable = os.path.join(project_root, ".venv", "bin", "python")
+    env = _make_subprocess_env(python_executable)
     
     with open(log_path, "a") as log_file:
         log_file.write(f"--- Triggered by {trigger_source} at {datetime.datetime.now()} ---\n")
         log_file.write(f"Project root: {project_root}\n")
         log_file.write(f"Python executable: {python_executable}\n")
         log_file.write(f"Script path: {script_path}\n")
+        log_file.write(f"Subprocess VIRTUAL_ENV: {env.get('VIRTUAL_ENV')}\n")
         log_file.flush()
 
         try:
@@ -158,6 +175,7 @@ def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
                 stdout=log_file,
                 stderr=log_file,
                 text=True,
+                env=env,
                 check=True  # Raise an exception if the command returns a non-zero exit code
             )
             log_file.write(f"--- CLI script finished with exit code {result.returncode} at {datetime.datetime.now()} ---\n")
