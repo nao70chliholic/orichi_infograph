@@ -8,6 +8,15 @@ import sys
 import asyncio
 import functools
 import datetime
+import urllib.request
+from PIL import ImageFont
+
+# Initialize macOS proxy settings and font loading on the main thread to prevent Resource deadlock in worker threads
+urllib.request.getproxies()
+try:
+    ImageFont.truetype("/System/Library/Fonts/Hiragino Sans GB.ttc", size=35, index=1)
+except Exception:
+    pass
 
 from dotenv import load_dotenv
 
@@ -123,7 +132,7 @@ def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats tas
     # Path to the Daily Counter project
     project_root = "/Users/naomatsuoka/Documents/開発/cnp/20250715orochi_dailycounter"
     script_path = os.path.join(project_root, "stats.py")
-    python_executable = os.path.join(project_root, ".venv", "bin", "python")
+    python_executable = os.path.join(project_root, ".venv", "bin", "python3")
     env = _make_subprocess_env(python_executable)
     
     with open(log_path, "a") as log_file:
@@ -155,45 +164,53 @@ def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats tas
         return result.returncode
 
 def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
-    """Wrapper function to run the blocking subprocess call and log its output."""
-    script_path = os.path.join(os.path.dirname(__file__), "cli_post_infograph.py")
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    python_executable = os.path.join(project_root, ".venv", "bin", "python")
-    env = _make_subprocess_env(python_executable)
+    """Wrapper function to run the CLI logic directly without subprocess."""
+    import sys
+    import cli_post_infograph as cli_module
     
     with open(log_path, "a") as log_file:
-        log_file.write(f"--- Triggered by {trigger_source} at {datetime.datetime.now()} ---\n")
-        log_file.write(f"Project root: {project_root}\n")
-        log_file.write(f"Python executable: {python_executable}\n")
-        log_file.write(f"Script path: {script_path}\n")
-        log_file.write(f"Subprocess VIRTUAL_ENV: {env.get('VIRTUAL_ENV')}\n")
+        log_file.write(f"--- Triggered directly by {trigger_source} at {datetime.datetime.now()} ---\n")
         log_file.flush()
-
-        try:
-            result = subprocess.run(
-                [python_executable, script_path],
-                stdout=log_file,
-                stderr=log_file,
-                text=True,
-                env=env,
-                check=True  # Raise an exception if the command returns a non-zero exit code
-            )
-            log_file.write(f"--- CLI script finished with exit code {result.returncode} at {datetime.datetime.now()} ---\n")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            log_file.write(f"--- CLI script failed: {e} at {datetime.datetime.now()} ---\n")
-            # If there's stderr output from the process, log it
-            if hasattr(e, 'stderr') and e.stderr:
-                log_file.write(f"--- Stderr: ---\n{e.stderr}\n")
-            return None  # Indicate failure
         
-        log_file.flush()
-        return result.returncode
+        # Redirect stdout and stderr to the log file
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = log_file
+        sys.stderr = log_file
+        
+        try:
+            exit_code = cli_module.main()
+            if exit_code is None:
+                exit_code = 0
+            log_file.write(f"--- CLI script finished with exit code {exit_code} at {datetime.datetime.now()} ---\n")
+        except Exception as e:
+            import traceback
+            log_file.write(f"--- CLI script failed: {e} at {datetime.datetime.now()} ---\n")
+            traceback.print_exc(file=log_file)
+            exit_code = 1
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            log_file.flush()
+            
+        return exit_code
 
 @client.tree.command()
 async def graph(interaction: discord.Interaction):
     """インフォグラフィックを生成して投稿します。"""
-    # Defer the response immediately, as the process takes time.
-    await interaction.response.defer(ephemeral=True)
+    try:
+        # Defer the response immediately with a small timeout buffer
+        await interaction.response.defer(ephemeral=True)
+    except discord.errors.NotFound:
+        print("[ERROR] Interaction expired before defer - likely timeout from slow import")
+        return
+    except Exception as e:
+        print(f"[ERROR] Failed to defer interaction: {e}")
+        try:
+            await interaction.followup.send(f"エラーが発生しました: {str(e)}", ephemeral=True)
+        except:
+            pass
+        return
 
     log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
 
@@ -202,8 +219,11 @@ async def graph(interaction: discord.Interaction):
         
         blocking_task = functools.partial(run_cli_script, log_file_path, "slash command")
         
-        # Run the blocking subprocess in a separate thread
-        exit_code = await loop.run_in_executor(None, blocking_task)
+        # Run the blocking subprocess in a separate thread with timeout
+        exit_code = await asyncio.wait_for(
+            loop.run_in_executor(None, blocking_task),
+            timeout=60.0  # 60 second timeout for the CLI script
+        )
 
         if exit_code == 0:
             # The webhook should have posted the image.
@@ -212,17 +232,33 @@ async def graph(interaction: discord.Interaction):
             error_message = f"インフォグラフィックの生成に失敗しました。ログを確認してください。:disappointed_relieved:"
             await interaction.followup.send(error_message)
 
+    except asyncio.TimeoutError:
+        error_message = "処理がタイムアウトしました。ログを確認してください。"
+        try:
+            await interaction.followup.send(error_message)
+        except:
+            print(f"[ERROR] Could not send timeout message: interaction may have expired")
+        
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"--- Timeout in graph command ---\n")
+
     except Exception as e:
-        error_message = f"予期せぬエラーが発生しました。:pleading_face:\n```{str(e)}```"
+        error_message = f"予期せぬエラーが発生しました。:pleading_face:\n```{str(e)[:100]}```"
         # Log the exception to the file as well
         with open(log_file_path, "a") as log_file:
             log_file.write(f"--- Exception in graph command: {e} ---\n")
-        await interaction.followup.send(error_message)
+        
+        try:
+            await interaction.followup.send(error_message)
+        except:
+            print(f"[ERROR] Could not send error message: {str(e)}")
 
 # Botを起動
 if __name__ == "__main__":
     if DISCORD_BOT_TOKEN:
+        print(f"[INFO] Starting bot with token: {DISCORD_BOT_TOKEN[:20]}...")
         try:
+            print(f"[INFO] Attempting to connect to Discord...")
             client.run(DISCORD_BOT_TOKEN)
         except Exception as exc:
             now = datetime.datetime.now(JST)

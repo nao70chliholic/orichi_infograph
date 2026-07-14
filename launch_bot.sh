@@ -10,4 +10,5 @@ VIRTUAL_ENV="$(pwd)/.venv"
 export VIRTUAL_ENV
 export PATH="$VIRTUAL_ENV/bin:$PATH"
 
-exec "$VIRTUAL_ENV/bin/python" "$(pwd)/bot/main.py"
+# Use python3 explicitly to ensure correct Python version
+exec "$VIRTUAL_ENV/bin/python3" "$(pwd)/bot/main.py"

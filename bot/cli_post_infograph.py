@@ -32,53 +32,44 @@ from orochi_infograph import core
 # --- Environment Variables ---
 load_dotenv() # Load environment variables from .env file
 
-# Debugging: Print loaded environment variables
-print(f"DEBUG: DISCORD_BOT_TOKEN loaded: {bool(os.getenv('DISCORD_BOT_TOKEN'))}")
-print(f"DEBUG: DISCORD_CHANNEL_ID loaded: {bool(os.getenv('DISCORD_CHANNEL_ID'))}")
-webhook_debug_urls = {k: v for k, v in os.environ.items() if k.startswith("DISCORD_WEBHOOK_URL")}
-print(f"DEBUG: Found Webhook URLs: {webhook_debug_urls}")
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 
+def _get_webhook_urls() -> list[str]:
+    """Lazily initialize webhook URLs and resolve channel IDs."""
+    # Collect all webhook URLs from environment variables
+    webhook_urls = [
+        value.strip() for key, value in os.environ.items()
+        if key.startswith("DISCORD_WEBHOOK_URL") and value and value.strip()
+    ]
+    
+    # Keep insertion order, but deduplicate exact URLs
+    seen = set()
+    unique_webhook_urls = []
+    for url in webhook_urls:
+        if url not in seen:
+            seen.add(url)
+            unique_webhook_urls.append(url)
+    
+    return unique_webhook_urls
 
-target_channel_ids_env = os.getenv("DISCORD_TARGET_CHANNEL_IDS", "")
-target_channel_ids = [cid.strip() for cid in target_channel_ids_env.split(",") if cid.strip()]
-# Keep insertion order while deduplicating channel IDs
-seen = set()
-unique_target_channel_ids = []
-for channel_id in target_channel_ids:
-    if channel_id not in seen:
-        seen.add(channel_id)
-        unique_target_channel_ids.append(channel_id)
-if len(target_channel_ids) != len(unique_target_channel_ids):
-    print(f"DEBUG: Removed {len(target_channel_ids) - len(unique_target_channel_ids)} duplicated target channel IDs")
-target_channel_ids = unique_target_channel_ids
-print(f"DEBUG: DISCORD_TARGET_CHANNEL_IDS parsed: {target_channel_ids}")
+def _get_target_channel_ids() -> list[str]:
+    """Lazily get target channel IDs."""
+    target_channel_ids_env = os.getenv("DISCORD_TARGET_CHANNEL_IDS", "")
+    target_channel_ids = [cid.strip() for cid in target_channel_ids_env.split(",") if cid.strip()]
+    
+    # Keep insertion order while deduplicating channel IDs
+    seen = set()
+    unique_target_channel_ids = []
+    for channel_id in target_channel_ids:
+        if channel_id not in seen:
+            seen.add(channel_id)
+            unique_target_channel_ids.append(channel_id)
+    
+    return unique_target_channel_ids
 
-
-DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN") # Discord Bot Token (for API access)
-DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID") # ID of the Discord channel to read from
-
-# Collect all webhook URLs from environment variables
-# This will find DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_URL_2, DISCORD_WEBHOOK_URL_3, etc.
-webhook_urls = [
-    value.strip() for key, value in os.environ.items()
-    if key.startswith("DISCORD_WEBHOOK_URL") and value and value.strip()
-]
-# Keep insertion order, but deduplicate exact URLs (avoid same webhook fired twice)
-seen = set()
-unique_webhook_urls = []
-for url in webhook_urls:
-    if url not in seen:
-        seen.add(url)
-        unique_webhook_urls.append(url)
-
-if len(webhook_urls) != len(unique_webhook_urls):
-    print(f"DEBUG: Removed {len(webhook_urls) - len(unique_webhook_urls)} duplicated webhook URLs")
-
-webhook_urls = unique_webhook_urls
-
-# Attempt to resolve webhook target channel IDs and deduplicate webhooks
-# that point to the same destination channel to avoid duplicate posts.
 def _resolve_webhook_channel_id(url: str, timeout: int | None = None) -> Optional[str]:
+    """Resolve a webhook's target channel ID."""
     if timeout is None:
         timeout = REQUEST_TIMEOUT
 
@@ -94,39 +85,9 @@ def _resolve_webhook_channel_id(url: str, timeout: int | None = None) -> Optiona
         if resp.ok:
             info = resp.json()
             return str(info.get("channel_id"))
-        print(f"DEBUG: Webhook info request failed for {url[:40]}: {resp.status_code} {resp.text}")
     except Exception as e:
-        print(f"DEBUG: Could not resolve webhook info for {url[:40]}: {e}")
+        pass
     return None
-
-seen_channels = set()
-resolved_webhook_urls = []
-unresolved_webhook_urls = []
-for url in webhook_urls:
-    channel_id = _resolve_webhook_channel_id(url)
-    if channel_id:
-        if channel_id in seen_channels:
-            print(f"DEBUG: Removing webhook {url[:40]} — duplicate target channel {channel_id}")
-            continue
-        seen_channels.add(channel_id)
-        resolved_webhook_urls.append(url)
-    else:
-        unresolved_webhook_urls.append(url)
-
-if resolved_webhook_urls and unresolved_webhook_urls:
-    print(f"DEBUG: Resolved {len(resolved_webhook_urls)} webhook(s) and kept {len(unresolved_webhook_urls)} unresolved webhook(s).")
-    webhook_urls = resolved_webhook_urls + unresolved_webhook_urls
-elif resolved_webhook_urls:
-    print(f"DEBUG: Resolved {len(resolved_webhook_urls)} webhook(s); no unresolved webhook URLs.")
-    webhook_urls = resolved_webhook_urls
-elif unresolved_webhook_urls:
-    print(f"DEBUG: Could not resolve any webhook channel IDs; using {len(unresolved_webhook_urls)} original webhook(s).")
-    webhook_urls = unresolved_webhook_urls
-else:
-    print("DEBUG: No webhook URLs configured.")
-    webhook_urls = []
-
-print(f"DEBUG: Final webhook URL count after resolution: {len(webhook_urls)}")
 
 # --- Main Logic ---
 
@@ -149,21 +110,39 @@ def main(dry_run: bool = False, output_path: str | None = None):
     """
     Main function to fetch data, generate image, and post to Discord.
     """
-    # Work with a local copy of the module-level `webhook_urls` so we can
-    # modify it within this function without affecting module state or
-    # requiring a `global` declaration.
-    webhooks = list(webhook_urls)
     total_start_time = time.time()
     print(f"--- Script started at {datetime.now()} ---")
 
     # Validate essential environment variables
     if not DISCORD_BOT_TOKEN or not DISCORD_CHANNEL_ID:
         print("Error: DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID must be set in the .env file.")
-        sys.exit(1)
+        return 1
 
-    if not webhooks and not target_channel_ids:
+    # Lazily initialize webhook and target channel IDs
+    webhook_urls = _get_webhook_urls()
+    target_channel_ids = _get_target_channel_ids()
+    
+    if not webhook_urls and not target_channel_ids:
         print("Error: Configure at least one DISCORD_WEBHOOK_URL... or provide DISCORD_TARGET_CHANNEL_IDS in the .env file.")
-        sys.exit(1)
+        return 1
+
+    # Resolve webhook URLs to avoid duplicates (optional optimization)
+    seen_channels = set()
+    resolved_webhook_urls = []
+    unresolved_webhook_urls = []
+    for url in webhook_urls:
+        channel_id = _resolve_webhook_channel_id(url)
+        if channel_id:
+            if channel_id in seen_channels:
+                continue
+            seen_channels.add(channel_id)
+            resolved_webhook_urls.append(url)
+        else:
+            unresolved_webhook_urls.append(url)
+    
+    webhooks = resolved_webhook_urls + unresolved_webhook_urls
+    if not webhooks:
+        webhooks = webhook_urls
 
     print(f"DEBUG: Using {len(webhooks)} webhook(s) and {len(target_channel_ids)} target channel IDs.")
 
@@ -239,7 +218,7 @@ def main(dry_run: bool = False, output_path: str | None = None):
 
     if not raw_text_data:
         print("Error: Could not find relevant data in channel history. Exiting.")
-        sys.exit(1)
+        return 1
 
     # 2. Parse Metrics, Title, and Title Timestamp
     start_time = time.time()
@@ -253,7 +232,7 @@ def main(dry_run: bool = False, output_path: str | None = None):
 
     if not metrics:
         print("Error: Parsed metrics is empty; refusing to post a blank infographic.")
-        sys.exit(1)
+        return 1
 
     # 3. Build Infographic Image
     start_time = time.time()
@@ -268,10 +247,10 @@ def main(dry_run: bool = False, output_path: str | None = None):
             with open(dry_output, "wb") as f:
                 f.write(image_data)
             print(f"Dry run complete: wrote infographic to {dry_output}")
-            sys.exit(0)
+            return 0
         except Exception as e:
             print(f"Error: Failed to write dry-run image to {dry_output}: {e}")
-            sys.exit(1)
+            return 1
 
     # Idempotency guard: avoid posting the same infographic twice
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -287,7 +266,7 @@ def main(dry_run: bool = False, output_path: str | None = None):
                 prev = json.load(pf)
         if prev.get('last_key') == post_key:
             print("INFO: Same infographic already posted previously; skipping to avoid duplicate.")
-            sys.exit(0)
+            return 0
     except Exception as e:
         print(f"DEBUG: Could not read posted record file: {e}")
 
@@ -404,4 +383,4 @@ def main(dry_run: bool = False, output_path: str | None = None):
 
 if __name__ == "__main__":
     args = parse_cli_args()
-    main(dry_run=args.dry_run, output_path=args.output)
+    sys.exit(main(dry_run=args.dry_run, output_path=args.output))
