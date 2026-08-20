@@ -55,8 +55,8 @@ class MyClient(discord.Client):
                     await self.tree.sync(guild=guild_obj)
             self._commands_synced = True
         # 定期実行タスクを開始（既に動いていれば再起動しない）
-        if not self.daily_stats.is_running():
-            self.daily_stats.start()
+        # if not self.daily_stats.is_running():
+        #     self.daily_stats.start()
         if not self.scheduled_post.is_running():
             self.scheduled_post.start()
 
@@ -164,33 +164,34 @@ def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats tas
         return result.returncode
 
 def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
-    """Wrapper function to run the CLI logic directly without subprocess."""
-    import sys
-    import cli_post_infograph as cli_module
-    
+    """Wrapper function to run the CLI logic via subprocess to avoid macOS deadlocks."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script_path = os.path.join(project_root, "bot", "cli_post_infograph.py")
+    python_executable = os.path.join(project_root, ".venv", "bin", "python")
+    env = _make_subprocess_env(python_executable)
+
     with open(log_path, "a") as log_file:
-        log_file.write(f"--- Triggered directly by {trigger_source} at {datetime.datetime.now()} ---\n")
+        log_file.write(f"--- Triggered by {trigger_source} at {datetime.datetime.now()} ---\n")
         log_file.flush()
         
-        # Redirect stdout and stderr to the log file
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        sys.stdout = log_file
-        sys.stderr = log_file
-        
         try:
-            exit_code = cli_module.main()
-            if exit_code is None:
-                exit_code = 0
-            log_file.write(f"--- CLI script finished with exit code {exit_code} at {datetime.datetime.now()} ---\n")
+            result = subprocess.run(
+                [python_executable, script_path],
+                cwd=project_root,
+                stdout=log_file,
+                stderr=log_file,
+                text=True,
+                env=env,
+                check=False
+            )
+            log_file.write(f"--- CLI script finished with exit code {result.returncode} at {datetime.datetime.now()} ---\n")
+            exit_code = result.returncode
         except Exception as e:
             import traceback
             log_file.write(f"--- CLI script failed: {e} at {datetime.datetime.now()} ---\n")
             traceback.print_exc(file=log_file)
             exit_code = 1
         finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
             log_file.flush()
             
         return exit_code
