@@ -10,3 +10,7 @@ venv/
 cron.log
 bot.log
 main_bot.log
+.DS_Store
+.last_posted.json
+*.png
+*.bak

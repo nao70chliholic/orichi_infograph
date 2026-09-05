@@ -7,10 +7,10 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/sh</string>
-        <string>/Users/naomatsuoka/Documents/開発/orochi_infograph/launch_bot.sh</string>
+        <string>/Users/naomatsuoka/orochi_infograph/launch_bot.sh</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/naomatsuoka/Documents/開発/orochi_infograph</string>
+    <string>/Users/naomatsuoka/orochi_infograph</string>
     <key>StandardOutPath</key>
     <string>/Users/naomatsuoka/Library/Logs/com.naomatsuoka.orochibot.main.log</string>
     <key>StandardErrorPath</key>

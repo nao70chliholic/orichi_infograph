@@ -88,7 +88,7 @@ class MyClient(discord.Client):
             log_file.write(f"--- Daily stats task error at {now} ---\n{error}\n")
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Daily stats error: {error}")
 
-    @tasks.loop(time=datetime.time(hour=7, minute=0, tzinfo=JST))
+    @tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=JST))
     async def scheduled_post(self):
         now = datetime.datetime.now(JST)
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post triggered.")
@@ -101,7 +101,7 @@ class MyClient(discord.Client):
     async def before_scheduled_post(self):
         await self.wait_until_ready()
         now = datetime.datetime.now(JST)
-        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post loop ready. Waiting until 07:00 JST.")
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post loop ready. Waiting until 09:00 JST.")
 
     @scheduled_post.error
     async def scheduled_post_error(self, error: Exception):
