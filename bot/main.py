@@ -59,6 +59,8 @@ class MyClient(discord.Client):
         #     self.daily_stats.start()
         if not self.scheduled_post.is_running():
             self.scheduled_post.start()
+        if not self.weekly_post.is_running():
+            self.weekly_post.start()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
@@ -110,6 +112,33 @@ class MyClient(discord.Client):
         with open(log_file_path, "a") as log_file:
             log_file.write(f"--- Scheduled task error at {now} ---\n{error}\n")
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post error: {error}")
+
+    # 週報テキストは土曜 07:20 JST 発火だが GitHub Actions の遅延で数時間ずれる。
+    # 10〜14時に毎正時試し、投稿済みなら .last_posted.json の重複ガードで空振りする。
+    @tasks.loop(time=[datetime.time(hour=h, minute=0, tzinfo=JST) for h in (10, 11, 12, 13, 14)])
+    async def weekly_post(self):
+        now = datetime.datetime.now(JST)
+        if now.weekday() != 5:  # 土曜以外は何もしない
+            return
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly post triggered.")
+        log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
+        exit_code = run_cli_script(log_file_path, trigger_source="weekly scheduled task", weekly=True)
+        if exit_code != 0:
+            print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly CLI run failed with exit code {exit_code}.")
+
+    @weekly_post.before_loop
+    async def before_weekly_post(self):
+        await self.wait_until_ready()
+        now = datetime.datetime.now(JST)
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly post loop ready. Waiting for Saturday 10:00-14:00 JST.")
+
+    @weekly_post.error
+    async def weekly_post_error(self, error: Exception):
+        now = datetime.datetime.now(JST)
+        log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"--- Weekly task error at {now} ---\n{error}\n")
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly post error: {error}")
 
 # Botのインテントを設定
 intents = discord.Intents.default()
@@ -163,12 +192,13 @@ def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats tas
         log_file.flush()
         return result.returncode
 
-def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
+def run_cli_script(log_path: str, trigger_source: str = "scheduled task", weekly: bool = False):
     """Wrapper function to run the CLI logic via subprocess to avoid macOS deadlocks."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     script_path = os.path.join(project_root, "bot", "cli_post_infograph.py")
     python_executable = os.path.join(project_root, ".venv", "bin", "python")
     env = _make_subprocess_env(python_executable)
+    command = [python_executable, script_path] + (["--weekly"] if weekly else [])
 
     with open(log_path, "a") as log_file:
         log_file.write(f"--- Triggered by {trigger_source} at {datetime.datetime.now()} ---\n")
@@ -176,7 +206,7 @@ def run_cli_script(log_path: str, trigger_source: str = "scheduled task"):
         
         try:
             result = subprocess.run(
-                [python_executable, script_path],
+                command,
                 cwd=project_root,
                 stdout=log_file,
                 stderr=log_file,

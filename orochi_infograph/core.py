@@ -23,6 +23,7 @@ OROCHI_PATH = Path(__file__).parent / "assets" / "plush_orochi.png" # Path to th
 # --- Public Functions ---
 
 DEFAULT_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "24時間の売買")
+WEEKLY_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "今週の売買")
 
 
 def _parse_breakdown(text: str) -> list[tuple[str, str]]:

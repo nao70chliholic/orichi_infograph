@@ -13,6 +13,13 @@ SAMPLE_MESSAGE = """◆FiNANCiE開運オロチトークン現在情報（2026年
 ・時価総額 26,381,054円
 #CNPオロチ #開運オロチ..."""
 
+WEEKLY_MESSAGE = """◆FiNANCiE開運オロチトークン週報（2026年09月05日）
+・メンバー数 22,643人（前週比 +15人）
+・トークン価格 9.0854円（前週比 -0.2247円）
+・今週の売買 4,249枚（買い 1,775枚／売り 2,473枚）
+・時価総額 26,371,056円
+#CNPオロチ #開運オロチ..."""
+
 
 import requests
 
@@ -84,8 +91,10 @@ class CliPostDryRunTest(unittest.TestCase):
             # messages API URL
             if '/messages' in url:
                 # Return a list of message dicts as the Discord API would
+                # 同じチャンネルに週報と日報が並んでいる状況を再現する
                 messages = [
-                    {'content': SAMPLE_MESSAGE}
+                    {'content': WEEKLY_MESSAGE},
+                    {'content': SAMPLE_MESSAGE},
                 ]
                 return FakeResponse(ok=True, status_code=200, data=messages)
             return FakeResponse(ok=False, status_code=404, data={})
@@ -115,6 +124,59 @@ class CliPostDryRunTest(unittest.TestCase):
             self.assertTrue(data.startswith(b'\x89PNG'))
 
             # Cleanup
+            os.unlink(tmpfile.name)
+
+    def test_weekly_mode_picks_the_weekly_report(self):
+        env = os.environ.copy()
+        env['DISCORD_BOT_TOKEN'] = 'dummy'
+        env['DISCORD_CHANNEL_ID'] = '123'
+        env['DISCORD_WEBHOOK_URL'] = 'https://discord.com/api/webhooks/139/abc'
+
+        def fake_requests_get(url, *args, **kwargs):
+            if '/api/webhooks/' in url and 'messages' not in url:
+                return FakeResponse(ok=True, status_code=200, data={'channel_id': '123'})
+            if '/messages' in url:
+                messages = [
+                    {'content': SAMPLE_MESSAGE},
+                    {'content': WEEKLY_MESSAGE},
+                ]
+                return FakeResponse(ok=True, status_code=200, data=messages)
+            return FakeResponse(ok=False, status_code=404, data={})
+
+        with mock.patch.dict(os.environ, env), \
+             mock.patch('requests.get', side_effect=fake_requests_get), \
+             mock.patch('discord_webhook.DiscordWebhook', DummyWebhook):
+
+            module = importlib.import_module('bot.cli_post_infograph')
+            importlib.reload(module)
+
+            captured = {}
+            original_build_image = module.core.build_image
+
+            def spy_build_image(metrics, title, title_timestamp):
+                captured['metrics'] = metrics
+                captured['title'] = title
+                return original_build_image(metrics, title, title_timestamp)
+
+            tmpfile = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            tmpfile.close()
+
+            with mock.patch.object(module.core, 'build_image', side_effect=spy_build_image):
+                try:
+                    module.main(dry_run=True, output_path=tmpfile.name, weekly=True)
+                except SystemExit as e:
+                    self.assertEqual(e.code, 0)
+
+            # 日報ではなく週報が選ばれていること
+            self.assertIn('週報', captured['title'])
+            self.assertEqual(
+                list(captured['metrics']), ['メンバー数', 'トークン価格', '今週の売買']
+            )
+            # 差分ラベルが「前週比」で保持されていること（画像もこれを描画する）
+            self.assertEqual(captured['metrics']['メンバー数']['label'], '前週比')
+
+            with open(tmpfile.name, 'rb') as f:
+                self.assertTrue(f.read().startswith(b'\x89PNG'))
             os.unlink(tmpfile.name)
 
 

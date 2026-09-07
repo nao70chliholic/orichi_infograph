@@ -104,12 +104,21 @@ def parse_cli_args() -> argparse.Namespace:
         default="dry_infograph.png",
         help="Output file path for dry-run image generation."
     )
+    parser.add_argument(
+        "--weekly",
+        action="store_true",
+        help="Build the image from the weekly report (週報) instead of the daily one."
+    )
     return parser.parse_args()
 
-def main(dry_run: bool = False, output_path: str | None = None):
+def main(dry_run: bool = False, output_path: str | None = None, weekly: bool = False):
     """
     Main function to fetch data, generate image, and post to Discord.
+
+    weekly=True のときは日報ではなく週報の投稿を拾う。
     """
+    target_keys = core.WEEKLY_TARGET_KEYS if weekly else core.DEFAULT_TARGET_KEYS
+    report_label = "週報" if weekly else "日報"
     total_start_time = time.time()
     print(f"--- Script started at {datetime.now()} ---")
 
@@ -174,17 +183,23 @@ def main(dry_run: bool = False, output_path: str | None = None):
                     continue
 
                 metrics, title, title_timestamp = core.parse_metrics(
-                    content, target_keys=core.DEFAULT_TARGET_KEYS
+                    content, target_keys=target_keys
                 )
 
-                # 日報（現在情報）だけを対象にする（週報は無視）
-                if "週報" in content or "週報" in title:
-                    continue
-                if "現在情報" not in content and "現在情報" not in title:
-                    continue
-                if "時点" not in content and "時点" not in title_timestamp:
-                    continue
-                if len(metrics) != len(core.DEFAULT_TARGET_KEYS):
+                # 日報と週報は同じチャンネルに並ぶので、どちらかだけを対象にする
+                is_weekly_message = "週報" in content or "週報" in title
+                if weekly:
+                    if not is_weekly_message:
+                        continue
+                else:
+                    if is_weekly_message:
+                        continue
+                    if "現在情報" not in content and "現在情報" not in title:
+                        continue
+                    # 日報のタイトルには「06:00時点」が入る（週報は日付だけなので課さない）
+                    if "時点" not in content and "時点" not in title_timestamp:
+                        continue
+                if len(metrics) != len(target_keys):
                     continue
 
                 score = len(metrics)
@@ -217,13 +232,13 @@ def main(dry_run: bool = False, output_path: str | None = None):
     print(f"--- 1. Discord API fetch took: {time.time() - start_time:.2f} seconds ---")
 
     if not raw_text_data:
-        print("Error: Could not find relevant data in channel history. Exiting.")
+        print(f"Error: Could not find relevant {report_label} data in channel history. Exiting.")
         return 1
 
     # 2. Parse Metrics, Title, and Title Timestamp
     start_time = time.time()
     metrics, title, title_timestamp = core.parse_metrics(
-        raw_text_data, target_keys=core.DEFAULT_TARGET_KEYS
+        raw_text_data, target_keys=target_keys
     )
     print("Parsed Metrics:", metrics)
     print("Parsed Title:", title)
@@ -383,4 +398,4 @@ def main(dry_run: bool = False, output_path: str | None = None):
 
 if __name__ == "__main__":
     args = parse_cli_args()
-    sys.exit(main(dry_run=args.dry_run, output_path=args.output))
+    sys.exit(main(dry_run=args.dry_run, output_path=args.output, weekly=args.weekly))
