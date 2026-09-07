@@ -22,7 +22,22 @@ OROCHI_PATH = Path(__file__).parent / "assets" / "plush_orochi.png" # Path to th
 
 # --- Public Functions ---
 
-DEFAULT_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "トークン在庫")
+DEFAULT_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "24時間の売買")
+
+
+def _parse_breakdown(text: str) -> list[tuple[str, str]]:
+    """
+    「買い 1,775枚／売り 2,473枚」を [("買い", "1,775枚"), ("売り", "2,473枚")] にします。
+    """
+    items: list[tuple[str, str]] = []
+    for part in re.split(r"[／/、]", text):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.match(r"^(?P<name>\D+?)\s*(?P<value>[\d\.,]+\s*\S*)$", part)
+        if m:
+            items.append((m.group("name").strip(), m.group("value").strip()))
+    return items
 
 
 def parse_metrics(raw_txt: str, *, target_keys: tuple[str, ...] | None = None) -> tuple[dict, str, str]:
@@ -52,7 +67,17 @@ def parse_metrics(raw_txt: str, *, target_keys: tuple[str, ...] | None = None) -
     metric_pattern = re.compile(
         r"^\s*・\s*(?P<key>.+?)\s+"
         r"(?P<val>[\d\.,]+)\s*(?P<unit>[^（(]+?)\s*"
-        r"[（(]\s*(?:前日比|前週比|前回比)\s*(?P<diff>[^）)]+)\s*[）)]\s*$"
+        r"[（(]\s*(?P<label>前日比|前週比|前回比)\s*(?P<diff>[^）)]+)\s*[）)]\s*$"
+    )
+    # 「・24時間の売買 4,249枚（買い 1,775枚／売り 2,473枚）」のような内訳つきの行
+    breakdown_pattern = re.compile(
+        r"^\s*・\s*(?P<key>.+?)\s+"
+        r"(?P<val>[\d\.,]+)\s*(?P<unit>[^（(]+?)\s*"
+        r"[（(]\s*(?P<breakdown>[^）)]+)\s*[）)]\s*$"
+    )
+    # 「・時価総額 26,381,054円」のような括弧のない行
+    plain_pattern = re.compile(
+        r"^\s*・\s*(?P<key>.+?)\s+(?P<val>[\d\.,]+)\s*(?P<unit>[^（()\s]*)\s*$"
     )
     # Regex for title line: captures the main title and its timestamp (anything inside parentheses).
     title_pattern = re.compile(r"^(◆.+?)\s*[（(]\s*(.+?)\s*[）)]\s*$")
@@ -70,14 +95,28 @@ def parse_metrics(raw_txt: str, *, target_keys: tuple[str, ...] | None = None) -
 
         metric_match = metric_pattern.match(line)
         if metric_match:
-            key = metric_match.group("key").strip()
-            val = metric_match.group("val").strip()
-            unit = metric_match.group("unit").strip()
-            diff = metric_match.group("diff").strip()
-            metrics[key] = {
-                "val": val.strip(),
-                "unit": unit.strip(),
-                "diff": diff.strip(),
+            metrics[metric_match.group("key").strip()] = {
+                "val": metric_match.group("val").strip(),
+                "unit": metric_match.group("unit").strip(),
+                "diff": metric_match.group("diff").strip(),
+                "label": metric_match.group("label").strip(),
+            }
+            continue
+
+        breakdown_match = breakdown_pattern.match(line)
+        if breakdown_match:
+            metrics[breakdown_match.group("key").strip()] = {
+                "val": breakdown_match.group("val").strip(),
+                "unit": breakdown_match.group("unit").strip(),
+                "breakdown": _parse_breakdown(breakdown_match.group("breakdown")),
+            }
+            continue
+
+        plain_match = plain_pattern.match(line)
+        if plain_match:
+            metrics[plain_match.group("key").strip()] = {
+                "val": plain_match.group("val").strip(),
+                "unit": plain_match.group("unit").strip(),
             }
 
     if target_keys is not None:
@@ -169,11 +208,20 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
         val_unit = f"{data['val']} {data['unit']}"
         draw.text((80, y_offset + 45), val_unit, font=font_metric_value, fill="#333366")
 
-        # Draw the "前日比" label and the difference value
-        diff_prefix = data["diff"][:1]
-        diff_color = "green" if diff_prefix in {"+", "＋"} else "blue"  # Color based on positive/negative difference
-        draw.text((WIDTH - 320, y_offset + 55), "前日比", font=font_small, fill="#333366")
-        draw.text((WIDTH - 220, y_offset + 55), data['diff'], font=font_small, fill=diff_color)
+        # 右側は、差分がある行は「前日比 +2人」、内訳がある行は「買い/売り」を積む
+        if "breakdown" in data:
+            for i, (name, value) in enumerate(data["breakdown"][:2]):
+                # 買いは緑、売りは青（差分の色分けと揃える）
+                item_color = "green" if i == 0 else "blue"
+                item_y = y_offset + 20 + i * 40
+                draw.text((WIDTH - 320, item_y), name, font=font_small, fill="#333366")
+                draw.text((WIDTH - 250, item_y), value, font=font_small, fill=item_color)
+        elif "diff" in data:
+            diff_prefix = data["diff"][:1]
+            diff_color = "green" if diff_prefix in {"+", "＋"} else "blue"  # Color based on positive/negative difference
+            diff_label = data.get("label", "前日比")
+            draw.text((WIDTH - 320, y_offset + 55), diff_label, font=font_small, fill="#333366")
+            draw.text((WIDTH - 220, y_offset + 55), data['diff'], font=font_small, fill=diff_color)
 
         # Move to the next panel position
         y_offset += 120 # Panel height + padding
