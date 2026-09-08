@@ -7,18 +7,43 @@ infographic image using Pillow, suitable for Discord posting.
 """
 
 import io
+import os
 import re
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 # --- Constants ---
 
 WIDTH = 768  # Width of the generated image
 HEIGHT = 768 # Height of the generated image
-BG_COLOR = "#B6E18D"  # Background color of the image
-PANEL_COLOR = "#FAFAE6" # Color of the metric panels
 FONT_PATH = "/System/Library/Fonts/Hiragino Sans GB.ttc" # Path to the system font for text rendering
-OROCHI_PATH = Path(__file__).parent / "assets" / "plush_orochi.png" # Path to the Orochi illustration
+ASSETS_DIR = Path(__file__).parent / "assets"
+
+# --- 配色とイラスト ---
+# 環境変数を設定しなければ既定値（開運オロチ）で動く。
+# コミュニティごとにテーマを変えたいときだけ、呼び出し側で環境変数を渡す。
+BG_COLOR = os.getenv("INFOGRAPH_BG_COLOR", "#B6E18D")       # 背景
+PANEL_COLOR = os.getenv("INFOGRAPH_PANEL_COLOR", "#FAFAE6") # 指標パネル
+TEXT_COLOR = os.getenv("INFOGRAPH_TEXT_COLOR", "#333366")   # パネル内の見出し・数値
+# タイトルと日時は背景の上に載るので、濃い背景を使うときはここだけ明るくする
+TITLE_COLOR = os.getenv("INFOGRAPH_TITLE_COLOR", "") or TEXT_COLOR
+UP_COLOR = os.getenv("INFOGRAPH_UP_COLOR", "green")         # プラスの差分／買い
+DOWN_COLOR = os.getenv("INFOGRAPH_DOWN_COLOR", "blue")      # マイナスの差分／売り
+
+# 右下のイラスト。assets/ 配下のファイル名か、絶対パスで指定する
+_character_raw = os.getenv("INFOGRAPH_CHARACTER", "plush_orochi.png")
+CHARACTER_PATH = Path(_character_raw) if os.path.isabs(_character_raw) else ASSETS_DIR / _character_raw
+OROCHI_PATH = CHARACTER_PATH  # 後方互換のための別名
+
+# NFTのPFPのように背景が白い正方形の画像は、そのまま貼ると白い四角になる。
+# "circle" を指定すると円形に切り抜いてアイコンとして置く。
+CHARACTER_SHAPE = os.getenv("INFOGRAPH_CHARACTER_SHAPE", "none")
+CHARACTER_SIZE = int(os.getenv("INFOGRAPH_CHARACTER_SIZE", "300"))
+# 透過PNGをJPGに変換すると、透過部分が黒（や白）で塗り潰される。
+# "1" を指定すると、四隅から連結している均一な背景を透過に戻す。
+CHARACTER_STRIP_BG = os.getenv("INFOGRAPH_CHARACTER_STRIP_BG", "") == "1"
+# タイトルを2行に折るときの区切り文字（見つからなければ自動で縮小する）
+TITLE_SPLIT = os.getenv("INFOGRAPH_TITLE_SPLIT", "トークン")
 
 # --- Public Functions ---
 
@@ -129,6 +154,62 @@ def parse_metrics(raw_txt: str, *, target_keys: tuple[str, ...] | None = None) -
 
     return metrics, title, title_timestamp
 
+def _strip_flat_background(image: Image.Image, tolerance: int = 24) -> Image.Image:
+    """
+    四隅から連結している均一な背景を透過にします。
+
+    キャラクターの黒い輪郭まで消さないよう、色で一括指定せず塗りつぶし（floodfill）で
+    外側から連結している領域だけを対象にします。
+    """
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    marker = (255, 0, 255)  # イラストに含まれない色を目印に使う
+    for seed in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)):
+        ImageDraw.floodfill(rgb, seed, marker, thresh=tolerance)
+
+    r, g, b = rgb.split()
+    is_marker = ImageChops.multiply(
+        ImageChops.multiply(
+            r.point(lambda v: 255 if v == marker[0] else 0),
+            g.point(lambda v: 255 if v == marker[1] else 0),
+        ),
+        b.point(lambda v: 255 if v == marker[2] else 0),
+    )
+    result = image.copy()
+    result.putalpha(ImageChops.invert(is_marker))
+    return result
+
+
+def _fit_font(draw: ImageDraw.ImageDraw, text: str, max_width: int, max_size: int) -> ImageFont.FreeTypeFont:
+    """
+    max_width に収まる最大のフォントを返します（タイトルのはみ出し防止）。
+    """
+    for size in range(max_size, 17, -2):
+        try:
+            font = ImageFont.truetype(FONT_PATH, size=size, index=2)
+        except IOError:
+            return ImageFont.load_default()
+        bbox = draw.textbbox((0, 0), text, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            return font
+    return font
+
+
+def _circle_crop(image: Image.Image) -> Image.Image:
+    """
+    正方形の画像を円形に切り抜きます。背景が白いPFP画像をそのまま貼ると
+    白い四角が残るため、アイコンとして置きたいときに使います。
+    """
+    size = image.size
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size[0] - 1, size[1] - 1), fill=255)
+    # 元画像に透過があれば、それも残す
+    mask.paste(Image.new("L", size, 0), (0, 0), Image.eval(image.getchannel("A"), lambda v: 255 - v))
+    result = image.copy()
+    result.putalpha(mask)
+    return result
+
+
 def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
     """
     Builds an infographic image based on the provided metrics, title, and timestamp.
@@ -162,8 +243,8 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
     # --- Draw Title ---
     if title:
         # Split the title into two lines for better layout
-        split_point = "トークン"
-        if split_point in title:
+        split_point = TITLE_SPLIT
+        if split_point and split_point in title:
             parts = title.split(split_point, 1)
             line1_text = parts[0] + split_point
             line2_text = parts[1]
@@ -172,11 +253,17 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
             line2_text = ""
 
         # Draw the first line of the title, centered
+        max_title_width = WIDTH - 60
+        font_title = _fit_font(draw, line1_text, max_title_width, 48)
+        if line2_text:
+            font_title = min(
+                font_title, _fit_font(draw, line2_text, max_title_width, 48), key=lambda f: f.size
+            )
         line1_bbox = draw.textbbox((0,0), line1_text, font=font_title)
         line1_width = line1_bbox[2] - line1_bbox[0]
         line1_height = line1_bbox[3] - line1_bbox[1]
         line1_x = (WIDTH - line1_width) / 2
-        draw.text((line1_x, 30), line1_text, font=font_title, fill="#333366")
+        draw.text((line1_x, 30), line1_text, font=font_title, fill=TITLE_COLOR)
 
         # Draw the second line of the title if it exists, centered below the first line
         if line2_text:
@@ -185,7 +272,7 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
             line2_height = line2_bbox[3] - line2_bbox[1]
             line2_x = (WIDTH - line2_width) / 2
             # Position line2 below line1 with some padding
-            draw.text((line2_x, 30 + line1_height + 10), line2_text, font=font_title, fill="#333366")
+            draw.text((line2_x, 30 + line1_height + 10), line2_text, font=font_title, fill=TITLE_COLOR)
             # Adjust initial Y offset for panels to accommodate two lines of title
             initial_y_offset = 30 + line1_height + 10 + line2_height + 30
         else:
@@ -203,25 +290,25 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
         draw.rectangle([50, y_offset, WIDTH - 50, y_offset + 100], fill=PANEL_COLOR)
 
         # Draw the metric name (e.g., "メンバー数")
-        draw.text((80, y_offset + 5), key, font=font_metric_name, fill="#333366")
+        draw.text((80, y_offset + 5), key, font=font_metric_name, fill=TEXT_COLOR)
 
         # Draw the metric value and unit (e.g., "21,826人")
         val_unit = f"{data['val']} {data['unit']}"
-        draw.text((80, y_offset + 45), val_unit, font=font_metric_value, fill="#333366")
+        draw.text((80, y_offset + 45), val_unit, font=font_metric_value, fill=TEXT_COLOR)
 
         # 右側は、差分がある行は「前日比 +2人」、内訳がある行は「買い/売り」を積む
         if "breakdown" in data:
             for i, (name, value) in enumerate(data["breakdown"][:2]):
                 # 買いは緑、売りは青（差分の色分けと揃える）
-                item_color = "green" if i == 0 else "blue"
+                item_color = UP_COLOR if i == 0 else DOWN_COLOR
                 item_y = y_offset + 20 + i * 40
-                draw.text((WIDTH - 320, item_y), name, font=font_small, fill="#333366")
+                draw.text((WIDTH - 320, item_y), name, font=font_small, fill=TEXT_COLOR)
                 draw.text((WIDTH - 250, item_y), value, font=font_small, fill=item_color)
         elif "diff" in data:
             diff_prefix = data["diff"][:1]
-            diff_color = "green" if diff_prefix in {"+", "＋"} else "blue"  # Color based on positive/negative difference
+            diff_color = UP_COLOR if diff_prefix in {"+", "＋"} else DOWN_COLOR  # Color based on positive/negative difference
             diff_label = data.get("label", "前日比")
-            draw.text((WIDTH - 320, y_offset + 55), diff_label, font=font_small, fill="#333366")
+            draw.text((WIDTH - 320, y_offset + 55), diff_label, font=font_small, fill=TEXT_COLOR)
             draw.text((WIDTH - 220, y_offset + 55), data['diff'], font=font_small, fill=diff_color)
 
         # Move to the next panel position
@@ -229,15 +316,21 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
 
     # --- Timestamp ---
     # Draw the timestamp at the bottom of the image
-    draw.text((50, HEIGHT - 70), title_timestamp, font=font_small, fill="#333366")
+    draw.text((50, HEIGHT - 70), title_timestamp, font=font_small, fill=TITLE_COLOR)
 
-    # --- Orochi Image ---
-    # Paste the Orochi illustration onto the image
-    if OROCHI_PATH.exists():
-        orochi_img = Image.open(OROCHI_PATH).convert("RGBA")
-        orochi_img = orochi_img.resize((300, 300)) # Resize the illustration
-        # Position the illustration at the bottom-right with some padding
-        img.paste(orochi_img, (WIDTH - 300 - 30, HEIGHT - 300 + 20), orochi_img)
+    # --- キャラクターのイラスト ---
+    if CHARACTER_PATH.exists():
+        character = Image.open(CHARACTER_PATH).convert("RGBA")
+        character = character.resize((CHARACTER_SIZE, CHARACTER_SIZE))
+        if CHARACTER_STRIP_BG:
+            character = _strip_flat_background(character)
+        if CHARACTER_SHAPE == "circle":
+            character = _circle_crop(character)
+            # 円は切れると不自然なので、canvas の内側に収める
+            position = (WIDTH - CHARACTER_SIZE - 40, HEIGHT - CHARACTER_SIZE - 40)
+        else:
+            position = (WIDTH - CHARACTER_SIZE - 30, HEIGHT - CHARACTER_SIZE + 20)
+        img.paste(character, position, character)
 
 
     # --- Return as BytesIO ---
@@ -250,4 +343,4 @@ def build_image(metrics: dict, title: str, title_timestamp: str) -> io.BytesIO:
 
 # --- dunder all ---
 # Define public API of the module
-__all__ = ["DEFAULT_TARGET_KEYS", "parse_metrics", "build_image"]
+__all__ = ["DEFAULT_TARGET_KEYS", "WEEKLY_TARGET_KEYS", "parse_metrics", "build_image"]
