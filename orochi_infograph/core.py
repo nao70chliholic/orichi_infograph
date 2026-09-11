@@ -47,8 +47,8 @@ TITLE_SPLIT = os.getenv("INFOGRAPH_TITLE_SPLIT", "トークン")
 
 # --- Public Functions ---
 
-DEFAULT_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "24時間の売買")
-WEEKLY_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "今週の売買")
+DEFAULT_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "24時間の売買代金")
+WEEKLY_TARGET_KEYS: tuple[str, ...] = ("メンバー数", "トークン価格", "今週の売買代金")
 
 
 def _parse_breakdown(text: str) -> list[tuple[str, str]]:
