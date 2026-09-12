@@ -90,7 +90,8 @@ class MyClient(discord.Client):
             log_file.write(f"--- Daily stats task error at {now} ---\n{error}\n")
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Daily stats error: {error}")
 
-    @tasks.loop(time=datetime.time(hour=9, minute=0, tzinfo=JST))
+    # 日次画像も、本人がPCを開けている時間帯（土日 6〜9時）に寄せる
+    @tasks.loop(time=datetime.time(hour=8, minute=0, tzinfo=JST))
     async def scheduled_post(self):
         now = datetime.datetime.now(JST)
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post triggered.")
@@ -103,7 +104,7 @@ class MyClient(discord.Client):
     async def before_scheduled_post(self):
         await self.wait_until_ready()
         now = datetime.datetime.now(JST)
-        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post loop ready. Waiting until 09:00 JST.")
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post loop ready. Waiting until 08:00 JST.")
 
     @scheduled_post.error
     async def scheduled_post_error(self, error: Exception):
@@ -113,9 +114,11 @@ class MyClient(discord.Client):
             log_file.write(f"--- Scheduled task error at {now} ---\n{error}\n")
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Scheduled post error: {error}")
 
-    # 週報テキストは土曜 07:20 JST 発火だが GitHub Actions の遅延で数時間ずれる。
-    # 10〜14時に毎正時試し、投稿済みなら .last_posted.json の重複ガードで空振りする。
-    @tasks.loop(time=[datetime.time(hour=h, minute=0, tzinfo=JST) for h in (10, 11, 12, 13, 14)])
+    # 週報テキストは土曜の日次と同じ実行で出る（着地 実測中央値 06:34 / 08:00までに88%）。
+    # 本人がPCを開けているのが土日の 6〜9時なので、そこに 7・8・9 時を置き、
+    # 取りこぼした週のために 12・15 時を後詰めにする。
+    # 投稿済みなら .last_posted.json の重複ガードで空振りするので、多めに試して問題ない。
+    @tasks.loop(time=[datetime.time(hour=h, minute=0, tzinfo=JST) for h in (7, 8, 9, 12, 15)])
     async def weekly_post(self):
         now = datetime.datetime.now(JST)
         if now.weekday() != 5:  # 土曜以外は何もしない
@@ -130,7 +133,7 @@ class MyClient(discord.Client):
     async def before_weekly_post(self):
         await self.wait_until_ready()
         now = datetime.datetime.now(JST)
-        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly post loop ready. Waiting for Saturday 10:00-14:00 JST.")
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly post loop ready. Waiting for Saturday 07/08/09/12/15 JST.")
 
     @weekly_post.error
     async def weekly_post_error(self, error: Exception):
