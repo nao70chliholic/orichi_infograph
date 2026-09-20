@@ -269,7 +269,11 @@ def main(dry_run: bool = False, output_path: str | None = None, weekly: bool = F
 
     # Idempotency guard: avoid posting the same infographic twice
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    posted_record_file = os.path.join(project_root, '.last_posted.json')
+    # 重複ガードの記録先。コミュニティごとに分けないと、片方の投稿が
+    # もう片方のキーを上書きして再試行のスキップが効かなくなる
+    posted_record_file = os.path.join(
+        project_root, os.getenv("POSTED_RECORD_FILE", ".last_posted.json")
+    )
     metrics_hash = hashlib.sha256(
         json.dumps(metrics, sort_keys=True, ensure_ascii=False).encode('utf-8')
     ).hexdigest()

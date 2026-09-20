@@ -61,6 +61,8 @@ class MyClient(discord.Client):
             self.scheduled_post.start()
         if not self.weekly_post.is_running():
             self.weekly_post.start()
+        if not self.cnp_weekly_post.is_running():
+            self.cnp_weekly_post.start()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
@@ -143,6 +145,38 @@ class MyClient(discord.Client):
             log_file.write(f"--- Weekly task error at {now} ---\n{error}\n")
         print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] Weekly post error: {error}")
 
+    # CNPスタープロジェクトの週次画像。オロチと同じ時間帯を10分ずらして置く
+    @tasks.loop(time=[datetime.time(hour=h, minute=10, tzinfo=JST) for h in (7, 8, 9, 12, 15)])
+    async def cnp_weekly_post(self):
+        now = datetime.datetime.now(JST)
+        if now.weekday() != 5:  # 土曜以外は何もしない
+            return
+        if not os.getenv("CNP_DISCORD_WEBHOOK_URL") or not os.getenv("CNP_DISCORD_CHANNEL_ID"):
+            print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] CNP weekly skipped: "
+                  ".env に CNP_DISCORD_WEBHOOK_URL / CNP_DISCORD_CHANNEL_ID が未設定")
+            return
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] CNP weekly post triggered.")
+        log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
+        exit_code = run_cli_script(
+            log_file_path, trigger_source="CNP weekly scheduled task", weekly=True, community="cnp"
+        )
+        if exit_code != 0:
+            print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] CNP weekly run failed with exit code {exit_code}.")
+
+    @cnp_weekly_post.before_loop
+    async def before_cnp_weekly_post(self):
+        await self.wait_until_ready()
+        now = datetime.datetime.now(JST)
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] CNP weekly loop ready. Waiting for Saturday 07/08/09/12/15:10 JST.")
+
+    @cnp_weekly_post.error
+    async def cnp_weekly_post_error(self, error: Exception):
+        now = datetime.datetime.now(JST)
+        log_file_path = os.path.join(os.path.dirname(__file__), "..", "cron.log")
+        with open(log_file_path, "a") as log_file:
+            log_file.write(f"--- CNP weekly task error at {now} ---\n{error}\n")
+        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] CNP weekly post error: {error}")
+
 # Botのインテントを設定
 intents = discord.Intents.default()
 client = MyClient(intents=intents)
@@ -195,12 +229,50 @@ def run_daily_stats_script(log_path: str, trigger_source: str = "daily stats tas
         log_file.flush()
         return result.returncode
 
-def run_cli_script(log_path: str, trigger_source: str = "scheduled task", weekly: bool = False):
+# CNPスタープロジェクトの見た目。既定値（開運オロチ）を上書きする値だけを持つ。
+# 由来は oridhi_dailicounter の README「コミュニティごとのテーマ」。
+CNP_THEME = {
+    "INFOGRAPH_BG_COLOR": "#2E3350",
+    "INFOGRAPH_PANEL_COLOR": "#F5F3EC",
+    "INFOGRAPH_TEXT_COLOR": "#2E3350",
+    "INFOGRAPH_TITLE_COLOR": "#F3D98B",
+    "INFOGRAPH_UP_COLOR": "#2E7D50",
+    "INFOGRAPH_DOWN_COLOR": "#3A5BC7",
+    "INFOGRAPH_CHARACTER": "MAKAMIshinonome.jpg",
+    "INFOGRAPH_CHARACTER_SIZE": "260",
+    "INFOGRAPH_CHARACTER_STRIP_BG": "1",
+    "INFOGRAPH_TITLE_SPLIT": "プロジェクト",
+    "POSTED_RECORD_FILE": ".last_posted_cnp.json",
+}
+
+
+def _apply_cnp_env(env: dict) -> dict:
+    """
+    CNP用の実行に切り替える。
+
+    cli_post_infograph は DISCORD_WEBHOOK_URL で**始まる**環境変数を
+    全部投稿先として拾うため、オロチ側のWebhookを必ず取り除くこと。
+    残すとCNPの画像がオロチのチャンネルにも飛ぶ。
+    """
+    for key in list(env):
+        if key.startswith("DISCORD_WEBHOOK_URL") or key == "DISCORD_WEBHOOK":
+            env.pop(key, None)
+    env.pop("DISCORD_TARGET_CHANNEL_IDS", None)
+    env["DISCORD_WEBHOOK_URL"] = os.getenv("CNP_DISCORD_WEBHOOK_URL", "")
+    env["DISCORD_CHANNEL_ID"] = os.getenv("CNP_DISCORD_CHANNEL_ID", "")
+    env.update(CNP_THEME)
+    return env
+
+
+def run_cli_script(log_path: str, trigger_source: str = "scheduled task", weekly: bool = False,
+                   community: str | None = None):
     """Wrapper function to run the CLI logic via subprocess to avoid macOS deadlocks."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     script_path = os.path.join(project_root, "bot", "cli_post_infograph.py")
     python_executable = os.path.join(project_root, ".venv", "bin", "python")
     env = _make_subprocess_env(python_executable)
+    if community == "cnp":
+        env = _apply_cnp_env(env)
     command = [python_executable, script_path] + (["--weekly"] if weekly else [])
 
     with open(log_path, "a") as log_file:
