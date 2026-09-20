@@ -251,13 +251,18 @@ def _apply_cnp_env(env: dict) -> dict:
     CNP用の実行に切り替える。
 
     cli_post_infograph は DISCORD_WEBHOOK_URL で**始まる**環境変数を
-    全部投稿先として拾うため、オロチ側のWebhookを必ず取り除くこと。
+    全部投稿先として拾うため、オロチ側のWebhookを必ず無効化すること。
     残すとCNPの画像がオロチのチャンネルにも飛ぶ。
+
+    ⚠️ del ではなく空文字を入れる。cli側は起動時に load_dotenv() を呼ぶので、
+    消しただけだと .env から読み直されて復活する（load_dotenv は既存の変数は
+    上書きしないが、無い変数は入れてしまう）。空文字なら「既存」扱いで上書きされず、
+    かつ cli 側の `if value and value.strip()` で投稿先から外れる。
     """
     for key in list(env):
         if key.startswith("DISCORD_WEBHOOK_URL") or key == "DISCORD_WEBHOOK":
-            env.pop(key, None)
-    env.pop("DISCORD_TARGET_CHANNEL_IDS", None)
+            env[key] = ""
+    env["DISCORD_TARGET_CHANNEL_IDS"] = ""
     env["DISCORD_WEBHOOK_URL"] = os.getenv("CNP_DISCORD_WEBHOOK_URL", "")
     env["DISCORD_CHANNEL_ID"] = os.getenv("CNP_DISCORD_CHANNEL_ID", "")
     env.update(CNP_THEME)
