@@ -14,3 +14,10 @@ main_bot.log
 .last_posted.json
 *.png
 *.bak
+
+# 重複ガードの記録（コミュニティごとに増える）
+.last_posted*.json
+
+# CNPのキャラクター画像。公開リポジトリなので追跡しない。
+# 使うときは手元の orochi_infograph/assets/ に置く（README参照）
+orochi_infograph/assets/MAKAMIshinonome.jpg
