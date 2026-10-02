@@ -13,7 +13,12 @@ SAMPLE_MESSAGE = """◆FiNANCiE開運オロチトークン現在情報（2026年
 ・時価総額 26,381,054円
 #CNPオロチ #開運オロチ..."""
 
-WEEKLY_MESSAGE = """◆FiNANCiE開運オロチトークン週報（2026年09月05日）
+# 週報は「今週の土曜ぶんか」を日付で検証するようになったため、
+# サンプルも実行時の直近の土曜に合わせる（固定日付だと弾かれる）
+import datetime as _dt
+_SAT = (_dt.date.today() - _dt.timedelta(days=(_dt.date.today().weekday() - 5) % 7)).strftime("%Y年%m月%d日")
+
+WEEKLY_MESSAGE = f"""◆FiNANCiE開運オロチトークン週報（{_SAT}）
 ・メンバー数 22,643人（前週比 +15人）
 ・トークン価格 9.0854円（前週比 -0.2247円）
 ・今週の売買代金 9,817円

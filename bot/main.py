@@ -242,7 +242,6 @@ CNP_THEME = {
     "INFOGRAPH_CHARACTER_SIZE": "260",
     "INFOGRAPH_CHARACTER_STRIP_BG": "1",
     "INFOGRAPH_TITLE_SPLIT": "プロジェクト",
-    "POSTED_RECORD_FILE": ".last_posted_cnp.json",
 }
 
 
@@ -278,6 +277,12 @@ def run_cli_script(log_path: str, trigger_source: str = "scheduled task", weekly
     env = _make_subprocess_env(python_executable)
     if community == "cnp":
         env = _apply_cnp_env(env)
+    # 重複ガードの記録先は「コミュニティ × 日次/週次」で分ける。
+    # 共有していると、日次の投稿が週次のキーを上書きし、翌週に先週の週報画像を
+    # 「未投稿」と誤認して再投稿してしまう（2026-10-03に実際に発生）。
+    suffix = "_cnp" if community == "cnp" else ""
+    kind = "_weekly" if weekly else "_daily"
+    env["POSTED_RECORD_FILE"] = f".last_posted{suffix}{kind}.json"
     command = [python_executable, script_path] + (["--weekly"] if weekly else [])
 
     with open(log_path, "a") as log_file:

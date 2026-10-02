@@ -6,6 +6,7 @@ generates an infographic image, and posts it back to Discord via Webhook.
 """
 
 import argparse
+import datetime as _dt
 import hashlib
 import json
 import os
@@ -91,6 +92,18 @@ def _resolve_webhook_channel_id(url: str, timeout: int | None = None) -> Optiona
 
 # --- Main Logic ---
 
+def expected_weekly_date_label(now: Optional[datetime] = None) -> str:
+    """
+    今回の週報が名乗るはずの日付（直近の土曜）を「2026年10月03日」の形で返します。
+
+    stats.py の run_weekly_report と同じ求め方。週報テキストが遅れている間に
+    **先週の週報を拾って再投稿してしまう事故**を防ぐために使う。
+    """
+    today = (now or datetime.now()).date()
+    saturday = today - _dt.timedelta(days=(today.weekday() - 5) % 7)
+    return saturday.strftime("%Y年%m月%d日")
+
+
 def parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate and post Orochi infograph images.")
     parser.add_argument(
@@ -119,6 +132,9 @@ def main(dry_run: bool = False, output_path: str | None = None, weekly: bool = F
     """
     target_keys = core.WEEKLY_TARGET_KEYS if weekly else core.DEFAULT_TARGET_KEYS
     report_label = "週報" if weekly else "日報"
+    expected_week = expected_weekly_date_label() if weekly else ""
+    if weekly:
+        print(f"[Weekly] 今週の週報として受け付ける日付: {expected_week}")
     total_start_time = time.time()
     print(f"--- Script started at {datetime.now()} ---")
 
@@ -190,6 +206,11 @@ def main(dry_run: bool = False, output_path: str | None = None, weekly: bool = F
                 is_weekly_message = "週報" in content or "週報" in title
                 if weekly:
                     if not is_weekly_message:
+                        continue
+                    # 今週ぶんでなければ採用しない。週報テキストの着地が遅れている間に
+                    # 先週の週報を拾って再投稿する事故が実際に起きた（2026-10-03）。
+                    if expected_week not in content and expected_week not in title_timestamp:
+                        print(f"[Weekly] 今週（{expected_week}）の週報ではないのでスキップ: {title_timestamp}")
                         continue
                 else:
                     if is_weekly_message:
