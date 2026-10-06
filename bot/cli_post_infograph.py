@@ -133,8 +133,11 @@ def main(dry_run: bool = False, output_path: str | None = None, weekly: bool = F
     target_keys = core.WEEKLY_TARGET_KEYS if weekly else core.DEFAULT_TARGET_KEYS
     report_label = "週報" if weekly else "日報"
     expected_week = expected_weekly_date_label() if weekly else ""
+    expected_day = datetime.now().strftime("%Y年%m月%d日")
     if weekly:
         print(f"[Weekly] 今週の週報として受け付ける日付: {expected_week}")
+    else:
+        print(f"[Daily] 今日の日報として受け付ける日付: {expected_day}")
     total_start_time = time.time()
     print(f"--- Script started at {datetime.now()} ---")
 
@@ -219,6 +222,11 @@ def main(dry_run: bool = False, output_path: str | None = None, weekly: bool = F
                         continue
                     # 日報のタイトルには「06:00時点」が入る（週報は日付だけなので課さない）
                     if "時点" not in content and "時点" not in title_timestamp:
+                        continue
+                    # 今日ぶんでなければ採用しない。週報と同じ事故（前日の日報を
+                    # 拾って再投稿）を防ぐ。重複ガードだけに頼らない
+                    if expected_day not in content and expected_day not in title_timestamp:
+                        print(f"[Daily] 今日（{expected_day}）の日報ではないのでスキップ: {title_timestamp}")
                         continue
                 if len(metrics) != len(target_keys):
                     continue

@@ -1,7 +1,9 @@
+import datetime as _dt
+_TODAY = _dt.date.today().strftime("%Y年%m月%d日")
 import pathlib
 from orochi_infograph import core
 
-SAMPLE_MESSAGE = """◆FiNANCiE開運オロチトークン現在情報（2026年09月08日 06:00時点）
+SAMPLE_MESSAGE = f"""◆FiNANCiE開運オロチトークン現在情報（{_TODAY} 06:00時点）
 ・オープン600日目
 ・メンバー数 22,645人（前日比 +2人）
 ・トークン価格 9.0969円（前日比 +0.0115円）
@@ -16,7 +18,7 @@ def test_parse_metrics():
     )
 
     assert title == "FiNANCiE開運オロチトークン現在情報"
-    assert title_timestamp == "2026年09月08日 06:00時点"
+    assert title_timestamp == f"{_TODAY} 06:00時点"
     assert metrics["メンバー数"]["val"] == "22,645"
     assert metrics["メンバー数"]["unit"] == "人"
     assert metrics["メンバー数"]["diff"] == "+2人"

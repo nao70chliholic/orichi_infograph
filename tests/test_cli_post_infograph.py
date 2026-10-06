@@ -3,20 +3,21 @@ import io
 import importlib
 import tempfile
 import unittest
+import datetime as _dt
+
+# 日報・週報とも「今日／今週ぶんか」を日付で検証するようになったため、
+# サンプルは実行時の日付に合わせる（固定日付だと弾かれる）
+_TODAY = _dt.date.today().strftime("%Y年%m月%d日")
+_SAT = (_dt.date.today() - _dt.timedelta(days=(_dt.date.today().weekday() - 5) % 7)).strftime("%Y年%m月%d日")
 from unittest import mock
 
-SAMPLE_MESSAGE = """◆FiNANCiE開運オロチトークン現在情報（2026年09月08日 06:00時点）
+SAMPLE_MESSAGE = f"""◆FiNANCiE開運オロチトークン現在情報（{_TODAY} 06:00時点）
 ・オープン600日目
 ・メンバー数 22,645人（前日比 +2人）
 ・トークン価格 9.0969円（前日比 +0.0115円）
 ・24時間の売買代金 5,225円
 ・時価総額 26,381,054円
 #CNPオロチ #開運オロチ..."""
-
-# 週報は「今週の土曜ぶんか」を日付で検証するようになったため、
-# サンプルも実行時の直近の土曜に合わせる（固定日付だと弾かれる）
-import datetime as _dt
-_SAT = (_dt.date.today() - _dt.timedelta(days=(_dt.date.today().weekday() - 5) % 7)).strftime("%Y年%m月%d日")
 
 WEEKLY_MESSAGE = f"""◆FiNANCiE開運オロチトークン週報（{_SAT}）
 ・メンバー数 22,643人（前週比 +15人）
